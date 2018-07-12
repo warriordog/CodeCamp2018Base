@@ -1,0 +1,19 @@
+{
+    "extends": "google",
+    "parserOptions": {
+        "ecmaVersion": 6
+    },
+    "rules": {
+        "linebreak-style" : ["error", "windows"],
+        "no-undef" : "error",
+        "no-var" : "off",
+        "require-jsdoc": "off",
+        "max-len": "off",
+        "no-multiple-empty-lines": "off",
+        "quotes": "off",
+        "no-trailing-spaces": "off"
+    },
+    "env": {
+        "node" : true
+    }
+}
