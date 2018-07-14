@@ -24,7 +24,7 @@ var BootstrapData = require('./data/data');
 
 // configure the logger
 var logger = LoggerJS.Logger.getInstance(); // simple logging wrapper
-logger.setLogLevel(LoggerJS.LOG_LEVELS["TRACE"]);
+logger.setLogLevel(LoggerJS.LOG_LEVELS["INFO"]);
 logger.trace(__filename, '', 'Logger initialized...');
 
 // Load the required modules
@@ -118,7 +118,7 @@ function ParseActiveGames(error, response, body) {
         if (BootstrapData.teamId == games[currentGame].team.id) {
             // the given team already has a game in progress, end it!
             logger.debug(__filename, 'ParseActiveGames()', UtilJS.format('Game with ID %s matched our team, terminating it!', games[currentGame].gameId));
-            shutdownGame(games[currentGame].gameId, createGame);
+            shutdownGame(games[currentGame].gameId, pickMaze);
             gameFound = true; // we found an active game
             break; // assume there could only be one active game...might not be right!
         }
@@ -267,7 +267,7 @@ function playGame(gameId, engram) {
     logger.trace(__filename, 'playGame()', '  Direction: ' + command.direction);
 
     logger.trace(__filename, 'playGame()', 'Making our move!');
-    makeRequest('http://game.code-camp-2018.com/game/action/'
+    makeReliableRequest('http://game.code-camp-2018.com/game/action/'
         + gameId + '?act=' + command.action + '&dir=' + command.direction,
         function(error, response, body) {
             logger.debug(__filename, 'playGame()-callback()', 'Entry Point');
@@ -339,4 +339,31 @@ function shutdownGame(gameId, callback) {
 function makeRequest(url, callback) {
     logger.debug(__filename, 'makeRequest()', UtilJS.format("Calling %s", url));
     req(url, callback);
+}
+
+function makeReliableRequest(theUrl, callback, currentTry) {
+    logger.debug(__filename, 'makeReliableRequest()', UtilJS.format("Calling %s", theUrl));
+    req({url: theUrl, timeout: 6000}, function(error, response, body) {
+        logger.trace(__filename, 'makeReliableRequest()-callback()', 'Entry Point');
+
+        if (null != error && error.code == "ETIMEDOUT") {
+            logger.warn(__filename, 'makeReliableRequest()-callback()', 'REQUEST TIMED OUT! Trying to recover...');
+            if (null == currentTry) {
+                currentTry = 1;
+            } else {
+                currentTry++;
+            }
+
+            if (currentTry < 10) {
+                logger.trace(__filename, 'makeReliableRequest()-callback()', UtilJS.format('Attempting try #%d', currentTry));
+                makeReliableRequest(theUrl, callback, currentTry);
+                return;
+            } // if tries are exceed, TIMEOUT will be passed to the callback() for handling
+        }
+
+        logger.trace(__filename, 'makeReliableRequest()-callback()', UtilJS.format('Calling %s()...', callback.name));
+        callback(error, response, body);
+
+        logger.trace(__filename, 'makeReliableRequest()-callback()', 'Exit Point');
+    });
 }
