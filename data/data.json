@@ -6,7 +6,8 @@
         "10:10:Snippy",
         "20:20:ZippyZoomer"
     ],
-    "specificMaze": null,
+    "specificMaze": "20:20:ZippyZoomer",
     "startAtBeginningOfMazeList": false,
-    "teamName": "Team Charlie"
+    "teamName": "Team Charlie",
+    "minimumCycleTime": 10
 }

@@ -255,6 +255,9 @@ function createGame() {
 function playGame(gameId, engram) {
     logger.debug(__filename, 'playGame()', 'Entry Point');
 
+    // get the timestamp to help throttle
+    var playGameStartTS = Date.now();
+
     logger.trace(__filename, 'playGame()', UtilJS.format('Engram: %s', engram));
 
     // TO-DO Bot Input Timer
@@ -301,8 +304,21 @@ function playGame(gameId, engram) {
             logger.debug(__filename, 'playGame()-callback()', UtilJS.format('Making move #%d', responseObj.score.moveCount + 1));
             
             // we haven't won, so let's keep playing!
-            logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
-            playGame(gameId, responseObj.engram);
+
+            // but first make sure we aren't moving TOO fast
+            var playGameEndTS = Date.now();
+            if (playGameEndTS - playGameStartTS < BootstrapData.minimumCycleTime) {
+                // we've gone too fast!
+                var delayInMS = BootstrapData.minimumCycleTime - (playGameEndTS - playGameStartTS);
+                setTimeout(function() {
+                    logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
+                    playGame(gameId, responseObj.engram);
+                }, delayInMS);
+            } else {
+                logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
+                playGame(gameId, responseObj.engram);    
+            }
+
             logger.debug(__filename, 'playGame()-callback()', 'Exit Point');
         }
     );
