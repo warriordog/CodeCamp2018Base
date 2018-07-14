@@ -35,7 +35,7 @@ var CodeCampBot1 = require('./Bots/CodeCamp-Bot1'); // load the Code Camp Module
 
 // some data here...
 var mazeId = '10:10:SlipperyDevil';
-var teamId = 'c7c904b3-ad48-4c44-9d1a-1c5f6982ca62';
+var teamId = '4a9654e9-9d13-401e-a2f9-9f5268b92fcd'; // 'c7c904b3-ad48-4c44-9d1a-1c5f6982ca62';
 
 // is there already an active game for this team?
 req('http://game.code-camp-2018.com/games/', function(error, response, body) {
@@ -64,8 +64,8 @@ req('http://game.code-camp-2018.com/games/', function(error, response, body) {
 // Create a game
 function createGame() {
     req('http://game.code-camp-2018.com/game/new/' + mazeId + '/' + teamId + '/', function(error, response, body) {
-        if (undefined != error) {
-            console.log('Error creating game: ' + error);
+        if (undefined != error || undefined == body || body.includes("Error creating")) {
+            console.log('Error creating game: ' + error + ";" + body);
             return;
         }
 
@@ -90,6 +90,17 @@ function playGame(gameId, engram) {
             }
 
             var responseObj = JSON.parse(body);
+
+            // check to see if we've won!
+            for (var currentOutcome = 0; currentOutcome < responseObj.outcome.length; currentOutcome++) {
+                if (responseObj.outcome[currentOutcome].includes("Congratulations!")) {
+                    // we solved the maze!
+                    console.log("Maze solved!");
+                    return; // nothing more to do
+                }
+            }
+            
+            // we haven't won, so let's keep playing!
             playGame(gameId, responseObj.engram);
         }
     );
