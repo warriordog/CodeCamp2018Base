@@ -20,11 +20,11 @@ delete require.cache['data/init.json'];
 // load utilities
 var LoggerJS = require('./Logger.js');
 var UtilJS = require('util');
-var InitData = require('./data/init');
+var BootstrapData = require('./data/data');
 
 // configure the logger
 var logger = LoggerJS.Logger.getInstance(); // simple logging wrapper
-logger.setLogLevel(LoggerJS.LOG_LEVELS["TRACE"]);
+logger.setLogLevel(LoggerJS.LOG_LEVELS["DEBUG"]);
 logger.trace(__filename, '', 'Logger initialized...');
 
 // Load the required modules
@@ -47,9 +47,47 @@ CodeCampBot4 = CodeCampBot5;
 CodeCampBot5 = CodeCampBot4;
 CodeCampBot2 = CodeCampBot6;
 
-// is there already an active game for this team?
-makeRequest('http://game.code-camp-2018.com/games/', ParseActiveGames);
+// try to find this team
+logger.trace(__filename, '', "Retrieving team list...");
+makeRequest('http://game.code-camp-2018.com/teams', FindMyTeam);
 
+function FindMyTeam(error, response, body) {
+    logger.debug(__filename, 'FindMyTeam()', 'Entry Point');
+
+    if (undefined != error) {
+        logger.error(__filename, 'FindMyTeam()', UtilJS.format('Error retrieving list of teams: %s' + error));
+        logger.debug(__filename, 'FindMyTeam()', 'ABEND!');
+        process.exit(1);
+    }
+
+    logger.trace(__filename, 'FindMyTeam()', UtilJS.format('Parsing JSON: %s', body));
+    var teamList = JSON.parse(body);
+
+    logger.trace(__filename, 'FindMyTeam()', UtilJS.format('Searching %d teams for "%s"...', teamList.length, BootstrapData.teamName));
+    var teamFound = false;
+    for (var currentTeam = 0; currentTeam < teamList.length; currentTeam++) {
+        logger.trace(__filename, 'FindMyTeam()', UtilJS.format('Team #%d is "%s"', currentTeam, teamList[currentTeam].name));
+
+        if (BootstrapData.teamName == teamList[currentTeam].name) {
+            logger.debug(__filename, 'FindMyTeam()', UtilJS.format('Found "%s" with ID %s', BootstrapData.teamName, teamList[currentTeam].id));
+            BootstrapData.teamId = teamList[currentTeam].id;
+            teamFound = true;
+            break; // we're done searching!
+        }
+    }
+
+    if (!teamFound) {
+        logger.error(__filename, 'FindMyTeam()', UtilJS.format('Could not locate a team with name "%s"!', BootstrapData.teamName));
+        logger.debug(__filename, 'FindMyTeam()', 'ABEND!');
+        process.exit(1);
+    }
+
+    // is there already an active game for this team?
+    logger.trace(__filename, 'FindMyTeam()', 'Looking for active games now...');
+    makeRequest('http://game.code-camp-2018.com/games/', ParseActiveGames);
+
+    logger.debug(__filename, 'FindMyTeam()', 'Exit Point');
+}
 
 function ParseActiveGames(error, response, body) {
     logger.debug(__filename, 'ParseActiveGames()', 'Entry Point');
@@ -66,17 +104,18 @@ function ParseActiveGames(error, response, body) {
     for (var currentGame = 0; currentGame < games.length; currentGame++) {
         logger.trace(__filename, 'ParseActiveGames()', UtilJS.format('Checking game #%d with id %s', currentGame, games[currentGame].gameId));
         logger.trace(__filename, 'ParseActiveGames()', UtilJS.format('Team for this game is %s', games[currentGame].team.id));
-        if (InitData.teamId == games[currentGame].team.id) {
+        if (BootstrapData.teamId == games[currentGame].team.id) {
             // the given team already has a game in progress, end it!
             logger.debug(__filename, 'ParseActiveGames()', UtilJS.format('Game with ID %s matched our team, terminating it!', games[currentGame].gameId));
             shutdownGame(games[currentGame].gameId, createGame);
             gameFound = true; // we found an active game
+            break; // assume there could only be one active game...might not be right!
         }
     }
 
     if (!gameFound) {
         // we didn't find an active game, so go ahead and create a new one
-        logger.debug(__filename, 'ParseActiveGames()', UtilJS.format('No active games found for team %s, starting one', InitData.teamId));
+        logger.debug(__filename, 'ParseActiveGames()', UtilJS.format('No active games found for team %s, starting one', BootstrapData.teamId));
         createGame();
     }
 
@@ -87,9 +126,9 @@ function ParseActiveGames(error, response, body) {
 function createGame() {
     logger.debug(__filename, 'createGame()', 'Entry Point');
     logger.trace(__filename, 'createGame()', UtilJS.format('Creating game with:'));
-    logger.trace(__filename, 'createGame()', UtilJS.format('  MazeID: %s', InitData.mazeId));
-    logger.trace(__filename, 'createGame()', UtilJS.format('  TeamID: %s', InitData.teamId));
-    makeRequest('http://game.code-camp-2018.com/game/new/' + InitData.mazeId + '/' + InitData.teamId + '/', function(error, response, body) {
+    logger.trace(__filename, 'createGame()', UtilJS.format('  MazeID: %s', BootstrapData.mazeId));
+    logger.trace(__filename, 'createGame()', UtilJS.format('  TeamID: %s', BootstrapData.teamId));
+    makeRequest('http://game.code-camp-2018.com/game/new/' + BootstrapData.mazeId + '/' + BootstrapData.teamId + '/', function(error, response, body) {
         logger.debug(__filename, 'createGame()-callback()', 'Entry Point');
         if (undefined != error || undefined == body || body.includes("Error creating")) {
             logger.error(__filename, 'createGame()-callback()', 'Error creating game: ' + error + ";" + body);
