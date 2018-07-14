@@ -40,6 +40,13 @@ var CodeCampBot4 = require('./Bots/CodeCamp-Bot4');
 var CodeCampBot5 = require('./Bots/CodeCamp-Bot5');
 var CodeCampBot6 = require('./Bots/CodeCamp-Bot6');
 
+// get rid of ESLint errors for now...
+CodeCampBot2 = CodeCampBot3;
+CodeCampBot3 = CodeCampBot2;
+CodeCampBot4 = CodeCampBot5;
+CodeCampBot5 = CodeCampBot4;
+CodeCampBot2 = CodeCampBot6;
+
 // is there already an active game for this team?
 makeRequest('http://game.code-camp-2018.com/games/', ParseActiveGames);
 
@@ -52,7 +59,7 @@ function ParseActiveGames(error, response, body) {
         process.exit(1);
     }
 
-    logger.trace(__filename, 'ParseActiveGames()', UtilJS.format('Parsing JSON: %s',  body));
+    logger.trace(__filename, 'ParseActiveGames()', UtilJS.format('Parsing JSON: %s', body));
     var games = JSON.parse(body);
     var gameFound = false;
     logger.trace(__filename, 'ParseActiveGames()', UtilJS.format('Checking %d games returned from server...', games.length));
@@ -107,7 +114,7 @@ function createGame() {
 function playGame(gameId, engram) {
     logger.debug(__filename, 'playGame()', 'Entry Point');
 
-    logger.trace(__filename, 'playGame()', 'Engram: ' + engram);
+    logger.trace(__filename, 'playGame()', UtilJS.format('Engram: %s', engram));
 
     // TO-DO Bot Input Timer
     // implement a timer mechanism to avoid anyone taking too long!
@@ -145,6 +152,9 @@ function playGame(gameId, engram) {
                     process.exit(0);
                 }
             }
+
+            // emit some info
+            logger.debug(__filename, 'playGame()-callback()', UtilJS.format('Making move #%d', responseObj.score.moveCount + 1));
             
             // we haven't won, so let's keep playing!
             logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
