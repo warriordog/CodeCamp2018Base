@@ -1,4 +1,12 @@
 {
-    "mazeId": "10:10:SlipperyDevil",
+    "mazes": [
+        "3:3:TinyTim",
+        "10:10:SlipperyDevil",
+        "10:10:SnarkyShark",
+        "10:10:Snippy",
+        "20:20:ZippyZoomer"
+    ],
+    "specificMaze": null,
+    "startAtBeginningOfMazeList": false,
     "teamName": "Team Charlie"
 }

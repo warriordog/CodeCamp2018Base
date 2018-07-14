@@ -24,7 +24,7 @@ var BootstrapData = require('./data/data');
 
 // configure the logger
 var logger = LoggerJS.Logger.getInstance(); // simple logging wrapper
-logger.setLogLevel(LoggerJS.LOG_LEVELS["DEBUG"]);
+logger.setLogLevel(LoggerJS.LOG_LEVELS["TRACE"]);
 logger.trace(__filename, '', 'Logger initialized...');
 
 // Load the required modules
@@ -46,6 +46,17 @@ CodeCampBot3 = CodeCampBot2;
 CodeCampBot4 = CodeCampBot5;
 CodeCampBot5 = CodeCampBot4;
 CodeCampBot2 = CodeCampBot6;
+
+// BASIC FLOW
+//   1. Find our Team ID from BootstrapData.teamName
+//   2. Parse active games to see if we already have one so we can stop it
+//   3. Examine the score history to find out which maze in BootstrapData.mazes we have not yet solved
+//        - if we're given a specific maze, just use that one
+//        - if we're told to start at the beginning, do so
+//        - if we've beat them all, ABEND!
+//   4. Create a game for the next maze we need to solve
+//   5. Play the game, simple request/response cycle calling the bots
+//   6. Once we solve the maze, go back to Step #3
 
 // try to find this team
 logger.trace(__filename, '', "Retrieving team list...");
@@ -115,11 +126,102 @@ function ParseActiveGames(error, response, body) {
 
     if (!gameFound) {
         // we didn't find an active game, so go ahead and create a new one
-        logger.debug(__filename, 'ParseActiveGames()', UtilJS.format('No active games found for team %s, starting one', BootstrapData.teamId));
-        createGame();
+        logger.debug(__filename, 'ParseActiveGames()', UtilJS.format('No active games found for team %s, picking a maze', BootstrapData.teamId));
+        pickMaze();
     }
 
     logger.debug(__filename, 'ParseActiveGames()', 'Exit Point');
+}
+
+// determine the maze to use
+function pickMaze() {
+    logger.debug(__filename, 'pickMaze()', 'Entry Point');
+    logger.trace(__filename, 'pickMaze()', UtilJS.format('BootstrapData.specificMaze: %s', BootstrapData.specificMaze));
+    logger.trace(__filename, 'pickMaze()', UtilJS.format('BootstrapData.startAtBeginningOfMazeList: %s', BootstrapData.startAtBeginningOfMazeList));
+
+    if (null != BootstrapData.specificMaze) {
+        if (BootstrapData.specificMazeStarted ) {
+            // we've already run the specific maze, so we're done here!
+            logger.info(__filename, 'pickMaze()', 'CONGRATULATIONS - you beat the specific maze!');
+            process.exit(0);
+        }
+
+        // use the maze specified!
+        logger.debug(__filename, 'pickMaze()', UtilJS.format('Using specified maze: %s', BootstrapData.specificMaze));
+        BootstrapData.mazeId = BootstrapData.specificMaze;
+        logger.trace(__filename, 'pickMaze()', UtilJS.format('Creating game!'));
+        BootstrapData.specificMazeStarted = true;
+        createGame();
+    } else if (BootstrapData.startAtBeginningOfMazeList) {
+        if (BootstrapData.currentMaze >= BootstrapData.mazes.length) {
+            // we've run all the mazes so we're done here!
+            logger.info(__filename, 'pickMaze()', 'CONGRATULATIONS - you beat all the mazes!');
+            process.exit(0);
+        }
+
+        // start at mazes[0]
+        if (null == BootstrapData.currentMaze) {
+            BootstrapData.currentMaze = 0;
+        }
+
+        logger.debug(__filename, 'pickMaze()', UtilJS.format('Selected maze #%d: %s', BootstrapData.currentMaze, BootstrapData.mazes[BootstrapData.currentMaze]));
+        BootstrapData.mazeId = BootstrapData.mazes[BootstrapData.currentMaze++];
+        logger.trace(__filename, 'pickMaze()', UtilJS.format('Creating game!'));
+        createGame();
+    } else {
+        // we've got some work to do...
+        logger.trace(__filename, 'pickMaze()', 'Requesting the list of scores from the server for our team');
+        req('http://score.code-camp-2018.com/get?teamId=' + BootstrapData.teamId, function(error, response, body) {
+            logger.debug(__filename, 'pickMaze()-callback()', 'Entry Point');
+
+            if (undefined != error) {
+                logger.error(__filename, 'pickMaze()-callback()', UtilJS.format('Error getting scores for team: %s', error));
+                logger.debug(__filename, 'pickMaze()-callback()', 'ABEND!');
+                process.exit(1);
+            }
+
+            logger.trace(__filename, 'pickMaze()-callback()', UtilJS.format('Parsing JSON: %s', body));
+            var scores = JSON.parse(body);
+
+            logger.trace(__filename, 'pickMaze()-callback()', UtilJS.format('Comparing list of %d mazes to list of %d scores.', BootstrapData.mazes.length, scores.length));
+            var foundMazeToPlay = false;
+            for (var currentMaze = 0; currentMaze < BootstrapData.mazes.length; currentMaze++) {
+                logger.trace(__filename, 'pickMaze()-callback()', UtilJS.format('Searching scores for a WIN on %s', BootstrapData.mazes[currentMaze]));
+                var foundScoreForMaze = false;
+
+                for (var currentScore = 0; currentScore < scores.length; currentScore++) {
+                    logger.trace(__filename, 'pickMaze()-callback()', UtilJS.format('Examining: %s', JSON.stringify(scores[currentScore])));
+                    if (scores[currentScore].mazeId == BootstrapData.mazes[currentMaze] &&
+                        scores[currentScore].gameResult == 6) {
+                        logger.trace(__filename, 'pickMaze()-callback()', UtilJS.format('A winning score for maze %s has been found!', BootstrapData.mazes[currentMaze]));
+                        foundScoreForMaze = true;
+                        break; // no need to search any further
+                    }
+                }
+
+                if (!foundScoreForMaze) {
+                    // we've never beaten this maze! use it!
+                    logger.debug(__filename, 'pickMaze()-callback()', UtilJS.format('Using this maze: %s', BootstrapData.mazes[currentMaze]));
+                    BootstrapData.mazeId = BootstrapData.mazes[currentMaze];
+                    foundMazeToPlay = true;
+                    break; // we're done here!
+                }
+            }
+
+            if (!foundMazeToPlay) {
+                // we didn't find a maze to launch, we're toast!
+                logger.info(__filename, 'pickMaze()-callback()', 'CONGRATULATIONS - you have beat all the games!');
+                process.exit(0);
+            }
+
+            logger.debug(__filename, 'pickMaze()-callback()', 'Found a maze to play, creating the game!');
+            createGame();
+
+            logger.debug(__filename, 'pickMaze()-callback()', 'Exit Point');
+        });
+    }
+
+    logger.debug(__filename, 'pickMaze()', 'Exit Point');
 }
 
 // Create a game
@@ -187,8 +289,11 @@ function playGame(gameId, engram) {
                     // we solved the maze!
                     logger.debug(__filename, 'playGame()-callback()', 'The maze has been solved!');
                     logger.info(__filename, 'playGame()-callback()', "MAZE SOLVED!");
-                    logger.trace(__filename, 'playGame()-callback()', 'Exiting now, nothing left to do.');
-                    process.exit(0);
+                    // logger.trace(__filename, 'playGame()-callback()', 'Exiting now, nothing left to do.');
+                    // process.exit(0);
+                    logger.trace(__filename, 'playGame()-callback()', 'Going to the next maze!');
+                    pickMaze();
+                    return;
                 }
             }
 
