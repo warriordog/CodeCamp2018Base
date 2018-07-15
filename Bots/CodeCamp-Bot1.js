@@ -105,22 +105,30 @@ module.exports = {
                     !engram.sight.toLowerCase().includes('wall')) {
                     // no lava, no wall, that's good!
 
-                    // go in the direction we're facing
-                    if (openExit(getRight(imFacing), engram.sight)) {
-                        imFacing = getRight(imFacing);
+                    if ("look" == command.action) {
+                        // if our last action was looking in a direction, go ahead and move that way
+                        imFacing = command.direction;
                         command.action = "move";
-                        command.direction = imFacing;
-                    } else if (openExit(imFacing, engram.sight)) {
-                        command.action = "move";
-                        command.direction = imFacing;
-                    } else if (openExit(getLeft(imFacing), engram.sight)) {
-                        imFacing = getLeft(imFacing);
-                        command.action = "move";
-                        command.direction = imFacing;
+                        lookedLeft = false;
+                        lookedRight = false;
                     } else {
-                        imFacing = getRight(getRight(imFacing));
-                        command.action = "move";
-                        command.direction = imFacing;
+                        // we're in motion, so use the sight sense to keep moving quickly
+                        if (openExit(getRight(imFacing), engram.sight)) {
+                            imFacing = getRight(imFacing);
+                            command.action = "move";
+                            command.direction = imFacing;
+                        } else if (openExit(imFacing, engram.sight)) {
+                            command.action = "move";
+                            command.direction = imFacing;
+                        } else if (openExit(getLeft(imFacing), engram.sight)) {
+                            imFacing = getLeft(imFacing);
+                            command.action = "move";
+                            command.direction = imFacing;
+                        } else {
+                            imFacing = getRight(getRight(imFacing));
+                            command.action = "move";
+                            command.direction = imFacing;
+                        }
                     }
                 } else {
                     if (!lookedRight) {
@@ -128,7 +136,7 @@ module.exports = {
                         command.action = "look";
                         command.direction = getRight(imFacing);
                     } else if (!lookedLeft) {
-                        lookedRight = true;
+                        lookedLeft = true;
                         command.action = "look";
                         command.direction = getLeft(imFacing);
                     } else {

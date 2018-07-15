@@ -256,7 +256,7 @@ function playGame(gameId, engram) {
     // implement a timer mechanism to avoid anyone taking too long!
 
     var botCommands = {};
-
+    logger.trace(__filename, 'playGame()', UtilJS.format('Iterating over %d bots', BootstrapData.numberOfBots));
     for (var currentBot = 0; currentBot < BootstrapData.numberOfBots; currentBot++) {
         if (BootstrapData.runAllBots || BootstrapData.singleBotToRun == (currentBot+1)) {
             logger.trace(__filename, 'playGame()', UtilJS.format('Asking Bot %d for input', currentBot+1));
