@@ -24,7 +24,7 @@ var BootstrapData = require('./data/data');
 
 // configure the logger
 var logger = LoggerJS.Logger.getInstance(); // simple logging wrapper
-logger.setLogLevel(LoggerJS.LOG_LEVELS["INFO"]);
+logger.setLogLevel(LoggerJS.LOG_LEVELS["TRACE"]);
 logger.trace(__filename, '', 'Logger initialized...');
 
 // Load the required modules
@@ -33,19 +33,11 @@ var req = require('request');
 
 // Load the CodeCamp Bots (These are the files you'll be working in!)
 logger.trace(__filename, '', 'Load Code Camp bots...');
-var CodeCampBot1 = require('./Bots/CodeCamp-Bot1');
-var CodeCampBot2 = require('./Bots/CodeCamp-Bot2');
-var CodeCampBot3 = require('./Bots/CodeCamp-Bot3');
-var CodeCampBot4 = require('./Bots/CodeCamp-Bot4');
-var CodeCampBot5 = require('./Bots/CodeCamp-Bot5');
-var CodeCampBot6 = require('./Bots/CodeCamp-Bot6');
-
-// get rid of ESLint errors for now...
-CodeCampBot2 = CodeCampBot3;
-CodeCampBot3 = CodeCampBot2;
-CodeCampBot4 = CodeCampBot5;
-CodeCampBot5 = CodeCampBot4;
-CodeCampBot2 = CodeCampBot6;
+var CodeCampBots = [];
+for (var currentBot = 0; currentBot < BootstrapData.numberOfBots; currentBot++) {
+    logger.trace(__filename, '', UtilJS.format('Loading Bot #%d', currentBot+1));
+    CodeCampBots[currentBot] = require(UtilJS.format('./Bots/CodeCamp-Bot%d', currentBot+1));
+}
 
 // BASIC FLOW
 //   1. Find our Team ID from BootstrapData.teamName
@@ -263,65 +255,81 @@ function playGame(gameId, engram) {
     // TO-DO Bot Input Timer
     // implement a timer mechanism to avoid anyone taking too long!
 
-    logger.trace(__filename, 'playGame()', 'Asking bots for input');
-    var command = CodeCampBot1.takeAction(engram);
-    logger.trace(__filename, 'playGame()', 'Bot 1 says: ');
-    logger.trace(__filename, 'playGame()', '  Action: ' + command.action);
-    logger.trace(__filename, 'playGame()', '  Direction: ' + command.direction);
+    var botCommands = {};
+
+    for (var currentBot = 0; currentBot < BootstrapData.numberOfBots; currentBot++) {
+        if (BootstrapData.runAllBots || BootstrapData.singleBotToRun == (currentBot+1)) {
+            logger.trace(__filename, 'playGame()', UtilJS.format('Asking Bot %d for input', currentBot+1));
+            botCommands[currentBot] = CodeCampBots[currentBot].takeAction(engram);
+            logger.trace(__filename, 'playGame()', UtilJS.format('Bot %d says:', currentBot+1));
+            logger.trace(__filename, 'playGame()', '  Action: ' + botCommands[currentBot].action);
+            logger.trace(__filename, 'playGame()', '  Direction: ' + botCommands[currentBot].direction);
+        }
+    }
 
     logger.trace(__filename, 'playGame()', 'Making our move!');
-    makeReliableRequest('http://game.code-camp-2018.com/game/action/'
-        + gameId + '?act=' + command.action + '&dir=' + command.direction,
-        function(error, response, body) {
-            logger.debug(__filename, 'playGame()-callback()', 'Entry Point');
-            if (null != error) {
-                logger.error(__filename, 'playGame()-callback()', "Error executing action request: " + error);
-                shutdownGame(gameId, null);
-                logger.debug(__filename, 'playGame()-callback()', 'Aborting game...will shutdown gracefully...');
-                return; // don't exit because we need shutdownGame to finish
-            }
 
-            logger.trace(__filename, 'playGame()-callback()', UtilJS.format('Parsing JSON: %s', body));
-            var responseObj = JSON.parse(body);
+    var actionUrl;
+    if (BootstrapData.runAllBots) {
+        // not yet implemented!
+        logger.error(__filename, 'playGame()', 'Running all bots is not yet supported!');
+        actionUrl = UtilJS.format('need URL for Coagulator');
+        process.exit(1);
+    } else {
+        actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/action/%s?act=%s&dir=%s',
+            gameId,
+            botCommands[BootstrapData.singleBotToRun - 1].action,
+            botCommands[BootstrapData.singleBotToRun - 1].direction
+        );
+    }
 
-            // check to see if we've won!
-            logger.trace(__filename, 'playGame()-callback()', UtilJS.format('Iterating over %s outcomes...', responseObj.outcome.length));
-            for (var currentOutcome = 0; currentOutcome < responseObj.outcome.length; currentOutcome++) {
-                logger.trace(__filename, 'playGame()-callback()', UtilJS.format('Examining outcome #%d: %s', currentOutcome, responseObj.outcome[currentOutcome]));
-                if (responseObj.outcome[currentOutcome].includes("Congratulations!")) {
-                    // we solved the maze!
-                    logger.debug(__filename, 'playGame()-callback()', 'The maze has been solved!');
-                    logger.info(__filename, 'playGame()-callback()', "MAZE SOLVED!");
-                    // logger.trace(__filename, 'playGame()-callback()', 'Exiting now, nothing left to do.');
-                    // process.exit(0);
-                    logger.trace(__filename, 'playGame()-callback()', 'Going to the next maze!');
-                    pickMaze();
-                    return;
-                }
-            }
-
-            // emit some info
-            logger.debug(__filename, 'playGame()-callback()', UtilJS.format('Making move #%d', responseObj.score.moveCount + 1));
-            
-            // we haven't won, so let's keep playing!
-
-            // but first make sure we aren't moving TOO fast
-            var playGameEndTS = Date.now();
-            if (playGameEndTS - playGameStartTS < BootstrapData.minimumCycleTime) {
-                // we've gone too fast!
-                var delayInMS = BootstrapData.minimumCycleTime - (playGameEndTS - playGameStartTS);
-                setTimeout(function() {
-                    logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
-                    playGame(gameId, responseObj.engram);
-                }, delayInMS);
-            } else {
-                logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
-                playGame(gameId, responseObj.engram);    
-            }
-
-            logger.debug(__filename, 'playGame()-callback()', 'Exit Point');
+    makeReliableRequest(actionUrl, function(error, response, body) {
+        logger.debug(__filename, 'playGame()-callback()', 'Entry Point');
+        if (null != error) {
+            logger.error(__filename, 'playGame()-callback()', "Error executing action request: " + error);
+            shutdownGame(gameId, null);
+            logger.debug(__filename, 'playGame()-callback()', 'Aborting game...will shutdown gracefully...');
+            return; // don't exit because we need shutdownGame to finish
         }
-    );
+
+        logger.trace(__filename, 'playGame()-callback()', UtilJS.format('Parsing JSON: %s', body));
+        var responseObj = JSON.parse(body);
+
+        // check to see if we've won!
+        logger.trace(__filename, 'playGame()-callback()', UtilJS.format('Iterating over %s outcomes...', responseObj.outcome.length));
+        for (var currentOutcome = 0; currentOutcome < responseObj.outcome.length; currentOutcome++) {
+            logger.trace(__filename, 'playGame()-callback()', UtilJS.format('Examining outcome #%d: %s', currentOutcome, responseObj.outcome[currentOutcome]));
+            if (responseObj.outcome[currentOutcome].includes("Congratulations!")) {
+                // we solved the maze!
+                logger.debug(__filename, 'playGame()-callback()', 'The maze has been solved!');
+                logger.info(__filename, 'playGame()-callback()', "MAZE SOLVED!");
+                // logger.trace(__filename, 'playGame()-callback()', 'Exiting now, nothing left to do.');
+                // process.exit(0);
+                logger.trace(__filename, 'playGame()-callback()', 'Going to the next maze!');
+                pickMaze();
+                return;
+            }
+        }
+
+        // we haven't won, so let's keep playing!
+        logger.debug(__filename, 'playGame()-callback()', UtilJS.format('Making move #%d', responseObj.score.moveCount + 1));
+        
+        // but first make sure we aren't moving TOO fast
+        var playGameEndTS = Date.now();
+        if (playGameEndTS - playGameStartTS < BootstrapData.minimumCycleTime) {
+            // we've gone too fast!
+            var delayInMS = BootstrapData.minimumCycleTime - (playGameEndTS - playGameStartTS);
+            setTimeout(function() {
+                logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
+                playGame(gameId, responseObj.engram);
+            }, delayInMS);
+        } else {
+            logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
+            playGame(gameId, responseObj.engram);    
+        }
+
+        logger.debug(__filename, 'playGame()-callback()', 'Exit Point');
+    });
     logger.debug(__filename, 'playGame()', 'Exit Point');
 }
 
