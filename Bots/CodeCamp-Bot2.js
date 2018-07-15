@@ -3,6 +3,7 @@
 var command = {
     action: null,
     direction: null,
+    message: "trying",
 };
 
 var imFacing = "south";

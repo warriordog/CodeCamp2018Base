@@ -3,6 +3,7 @@
 var command = {
     action: null,
     direction: null,
+    message: null,
 };
 
 module.exports = {

@@ -296,29 +296,31 @@ function playGame(gameId, gameState) {
     var weightedResults = {
         actions: {},
         directions: {},
+        messages: {},
     };
-    // if (!BootstrapData.runAllBots) {
-    //     logger.trace(__filename, 'playGame()', UtilJS.format('Forcing Bot #%d to 100% weight!', BootstrapData.singleBotToRun));
-    //     weightedResults.direction[botCommands[BootstrapData.singleBotToRun-1].command] = 1;
-    //     weightedResults.actions[botCommands[BootstrapData.singleBotToRun-1].action] = 1;
-    // } else {
-        for (var currentBot = 0; currentBot < botCommands.length; currentBot++) {
-            if (null != botCommands[currentBot].action) {
-                if (botCommands[currentBot].action in weightedResults.actions) {
-                    weightedResults.actions[botCommands[currentBot].action] += BootstrapData.botData[currentBot].weight/100;
-                } else {
-                    weightedResults.actions[botCommands[currentBot].action] = BootstrapData.botData[currentBot].weight/100;
-                }
-            }
-            if (null != botCommands[currentBot].direction) {
-                if (botCommands[currentBot].direction in weightedResults.directions) {
-                    weightedResults.directions[botCommands[currentBot].direction] += BootstrapData.botData[currentBot].weight/100;
-                } else {
-                    weightedResults.directions[botCommands[currentBot].direction] = BootstrapData.botData[currentBot].weight/100;
-                }
+    for (var currentBot = 0; currentBot < botCommands.length; currentBot++) {
+        if (null != botCommands[currentBot].action) {
+            if (botCommands[currentBot].action in weightedResults.actions) {
+                weightedResults.actions[botCommands[currentBot].action] += BootstrapData.botData[currentBot].weight/100;
+            } else {
+                weightedResults.actions[botCommands[currentBot].action] = BootstrapData.botData[currentBot].weight/100;
             }
         }
-    // }
+        if (null != botCommands[currentBot].direction) {
+            if (botCommands[currentBot].direction in weightedResults.directions) {
+                weightedResults.directions[botCommands[currentBot].direction] += BootstrapData.botData[currentBot].weight/100;
+            } else {
+                weightedResults.directions[botCommands[currentBot].direction] = BootstrapData.botData[currentBot].weight/100;
+            }
+        }
+        if (null != botCommands[currentBot].message) {
+            if (botCommands[currentBot].message in weightedResults.messages) {
+                weightedResults.messages[botCommands[currentBot].message] += BootstrapData.botData[currentBot].weight/100;
+            } else {
+                weightedResults.messages[botCommands[currentBot].message] = BootstrapData.botData[currentBot].weight/100;
+            }
+        }
+    }
 
     logger.trace(__filename, 'playGame()', 'Picking highest score...');
     var winningCommand = {
@@ -327,6 +329,10 @@ function playGame(gameId, gameState) {
             weight: 0,
         },
         direction: {
+            value: null,
+            weight: 0,
+        },
+        message: {
             value: null,
             weight: 0,
         },
@@ -343,6 +349,12 @@ function playGame(gameId, gameState) {
             winningCommand.direction.value = direction;
         }
     }
+    for (var message in weightedResults.messages) {
+        if (weightedResults.messages[message] > winningCommand.message.weight) {
+            winningCommand.message.weight = weightedResults.messages[message];
+            winningCommand.message.value = message;
+        }
+    }
 
     logger.trace(__filename, 'playGame()', 'Producing cohesion results...');
     var cohesionScores = [];
@@ -354,10 +366,13 @@ function playGame(gameId, gameState) {
         }
         
         if (botCommands[currentBot].action == winningCommand.action.value) {
-            cohesionScores[currentBot] == null ? cohesionScores[currentBot] = 0.5 : cohesionScores[currentBot] += 0.5;
+            cohesionScores[currentBot] == null ? cohesionScores[currentBot] = 0.34 : cohesionScores[currentBot] += 0.34;
         }
         if (botCommands[currentBot].direction == winningCommand.direction.value) {
-            cohesionScores[currentBot] == null ? cohesionScores[currentBot] = 0.5 : cohesionScores[currentBot] += 0.5;
+            cohesionScores[currentBot] == null ? cohesionScores[currentBot] = 0.34 : cohesionScores[currentBot] += 0.34;
+        }
+        if (botCommands[currentBot].message == winningCommand.message.value) {
+            cohesionScores[currentBot] == null ? cohesionScores[currentBot] = 0.32 : cohesionScores[currentBot] += 0.32;
         }
     }
 
@@ -368,6 +383,22 @@ function playGame(gameId, gameState) {
         winningCommand.action.value,
         winningCommand.direction.value
     );
+
+    // build the interleaved message
+    var interleavedMessage = "";
+    for (var message in weightedResults.messages) {
+        if (null != message) {
+            interleavedMessage = interleaveText(interleavedMessage, message);
+        }
+    }
+
+    var actionPayload = JSON.stringify({
+        gameId: gameId,
+        action: winningCommand.action.value != null ? winningCommand.action.value : "none",
+        direction: winningCommand.direction.value != null ? winningCommand.direction.value : "none",
+        message: interleavedMessage,
+        cohesionScores: cohesionScores,
+    });
 
     makeReliableRequest(actionUrl, function(error, response, body) {
         logger.debug(__filename, 'playGame()-callback()', 'Entry Point');
@@ -478,28 +509,40 @@ function makeReliableRequest(theUrl, callback, currentTry) {
     });
 }
 
-/*
-export function doPost(url: string, body: any, callback: Function) {
-   log.debug(__filename, format('doPost(%s, %s, %s)', url, body, callback.name), format('Requesting [%s] with callback to [%s]', url, callback.name));
-   let options = {
-       url: url,
-       json: body
+function makeReliablePost(theUrl, postBody, callback, currentTry) {
+   var options = {
+       url: theUrl,
+       json: postBody,
+       timeout: 6000,
    };
 
-   request.post(options, (err, res, body) => {
+   req.post(options, (err, res, body) => {
        if (err) {
-           log.error(__filename, 'doPost()', format('Error from %s \n::ERROR INFO:: %s', url, JSON.stringify(err)));
            return err;
        }
 
        if (res.statusCode != 200) {
-           log.warn(__filename, 'doPost()', format('Response Code %d (%s) recieved! Discarding response from %s', res.statusCode, res.statusMessage, url));
            return;
        }
 
        // all good, apparently - fire othe callback
-       log.debug(__filename, 'doPost()', format('Response %d (%s) recieved. Calling back to [%s]', res.statusCode, res.statusMessage, callback.name));
        callback(res, body);
    });
 }
-*/
+
+function interleaveText(str1, str2) {
+    var result = "";
+    var currentCharacter;
+    var numberOfCharacters = str1.length > str2.length ? str1.length : str2.length;
+
+    for (var currentCharacter = 0; currentCharacter < numberOfCharacters; currentCharacter++) {
+        if (currentCharacter < str1.length) {
+            result += str1[currentCharacter];
+        }
+        if (currentCharacter < str2.length) {
+            result += str2[currentCharacter];
+        }
+    }
+
+    return result;
+}
