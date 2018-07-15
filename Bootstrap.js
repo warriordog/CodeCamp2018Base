@@ -127,16 +127,19 @@ function ParseActiveGames(error, response, body) {
 }
 
 // determine the maze to use
-function pickMaze() {
+function pickMaze(wonLastMaze) {
     logger.debug(__filename, 'pickMaze()', 'Entry Point');
+    logger.trace(__filename, 'pickMaze()', UtilJS.format('  wonLastMaze = %s', wonLastMaze));
     logger.trace(__filename, 'pickMaze()', UtilJS.format('BootstrapData.specificMaze: %s', BootstrapData.specificMaze));
     logger.trace(__filename, 'pickMaze()', UtilJS.format('BootstrapData.startAtBeginningOfMazeList: %s', BootstrapData.startAtBeginningOfMazeList));
 
     if (null != BootstrapData.specificMaze) {
-        if (BootstrapData.specificMazeStarted ) {
-            // we've already run the specific maze, so we're done here!
-            logger.info(__filename, 'pickMaze()', 'CONGRATULATIONS - you beat the specific maze!');
-            process.exit(0);
+        if (BootstrapData.specificMazeStarted) {
+            if (wonLastMaze == true) {
+                // we've already run the specific maze, so we're done here!
+                logger.info(__filename, 'pickMaze()', 'CONGRATULATIONS - you beat the specific maze!');
+                process.exit(0);
+            }
         }
 
         // use the maze specified!
@@ -146,6 +149,10 @@ function pickMaze() {
         BootstrapData.specificMazeStarted = true;
         createGame();
     } else if (BootstrapData.startAtBeginningOfMazeList) {
+        if (wonLastMaze) {
+            BootstrapData.currentMaze++; // go back a maze!
+        }
+
         if (BootstrapData.currentMaze >= BootstrapData.mazes.length) {
             // we've run all the mazes so we're done here!
             logger.info(__filename, 'pickMaze()', 'CONGRATULATIONS - you beat all the mazes!');
@@ -158,7 +165,7 @@ function pickMaze() {
         }
 
         logger.debug(__filename, 'pickMaze()', UtilJS.format('Selected maze #%d: %s', BootstrapData.currentMaze, BootstrapData.mazes[BootstrapData.currentMaze]));
-        BootstrapData.mazeId = BootstrapData.mazes[BootstrapData.currentMaze++];
+        BootstrapData.mazeId = BootstrapData.mazes[BootstrapData.currentMaze];
         logger.trace(__filename, 'pickMaze()', UtilJS.format('Creating game!'));
         createGame();
     } else {
@@ -414,22 +421,16 @@ function playGame(gameId, gameState) {
     }
     logger.trace(__filename, 'playGame()', UtilJS.format('Interleaving result = "%s"', interleavedMessage));
 
-    var actionPayload = JSON.stringify({
+    var actionPayload = {
         gameId: gameId,
         action: winningCommand.action.value != null ? winningCommand.action.value : "none",
         direction: winningCommand.direction.value != null ? winningCommand.direction.value : "none",
         message: interleavedMessage,
         cohesionScores: cohesionScores,
-    });
-
-    var actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/action/%s?act=%s&dir=%s',
-        gameId,
-        winningCommand.action.value,
-        winningCommand.direction.value
-    );
+    };
 
     logger.trace(__filename, 'playGame()', 'Making our move!');
-    makeReliableRequest(actionUrl, function(error, response, body) {
+    makeReliablePost('http://game.code-camp-2018.com/game/action/', actionPayload, function(error, response, body) {
         logger.debug(__filename, 'playGame()-callback()', 'Entry Point');
         if (null != error) {
             logger.error(__filename, 'playGame()-callback()', "Error executing action request: " + error);
@@ -438,8 +439,16 @@ function playGame(gameId, gameState) {
             return; // don't exit because we need shutdownGame to finish
         }
 
-        logger.trace(__filename, 'playGame()-callback()', UtilJS.format('Parsing JSON: %s', body));
-        var responseObj = JSON.parse(body);
+        logger.trace(__filename, 'playGame()-callback()', UtilJS.format('JSON returned: %s', body));
+        var responseObj = body;
+
+        // are we dead?
+        if (responseObj.playerState & 512) {
+            logger.info(__filename, 'playGame()-callback()', "YOU HAVE DIED!");
+            logger.trace(__filename, 'playGame()-callback()', 'Going to the next maze!');
+            pickMaze(false);
+            return;
+        }
 
         // check to see if we've won!
         logger.trace(__filename, 'playGame()-callback()', UtilJS.format('Iterating over %s outcomes...', responseObj.outcome.length));
@@ -447,12 +456,16 @@ function playGame(gameId, gameState) {
             logger.trace(__filename, 'playGame()-callback()', UtilJS.format('Examining outcome #%d: %s', currentOutcome, responseObj.outcome[currentOutcome]));
             if (responseObj.outcome[currentOutcome].includes("Congratulations!")) {
                 // we solved the maze!
-                logger.debug(__filename, 'playGame()-callback()', 'The maze has been solved!');
                 logger.info(__filename, 'playGame()-callback()', "MAZE SOLVED!");
-                // logger.trace(__filename, 'playGame()-callback()', 'Exiting now, nothing left to do.');
-                // process.exit(0);
                 logger.trace(__filename, 'playGame()-callback()', 'Going to the next maze!');
-                pickMaze();
+                pickMaze(true);
+                return;
+            }
+            if (responseObj.outcome[currentOutcome].includes("YOU HAVE DIED")) {
+                // we're dead, Jim...
+                logger.info(__filename, 'playGame()-callback()', "YOU HAVE DIED!");
+                logger.trace(__filename, 'playGame()-callback()', 'Going to the next maze!');
+                pickMaze(false);
                 return;
             }
         }
@@ -511,6 +524,7 @@ function makeRequest(url, callback) {
     req(url, callback);
 }
 
+/*
 function makeReliableRequest(theUrl, callback, currentTry) {
     logger.debug(__filename, 'makeReliableRequest()', UtilJS.format("Calling %s", theUrl));
     req({url: theUrl, timeout: 6000}, function(error, response, body) {
@@ -537,14 +551,18 @@ function makeReliableRequest(theUrl, callback, currentTry) {
         logger.trace(__filename, 'makeReliableRequest()-callback()', 'Exit Point');
     });
 }
+*/
 
 function makeReliablePost(theUrl, postBody, callback, currentTry) {
     logger.debug(__filename, 'makeReliablePost()', UtilJS.format("Calling %s", theUrl));
-    logger.trace(__filename, 'makeReliablePost()', UtilJS.format("  Body: %s", postBody));
+    logger.trace(__filename, 'makeReliablePost()', UtilJS.format("  Body: %s", JSON.stringify(postBody)));
     var options = {
         url: theUrl,
         json: postBody,
         timeout: 6000,
+        headers: {
+            'Content-Type': "application/json",
+        },
     };
 
     req.post(options, function(error, response, body) {
