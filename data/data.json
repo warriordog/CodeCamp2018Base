@@ -1,7 +1,7 @@
 {
     "teamName": "Team Charlie",
-    "runAllBots": false,
-    "singleBotToRun": 1,
+    "runAllBots": true,
+    "singleBotToRun": 2,
 
     "specificMaze": null,
     "startAtBeginningOfMazeList": true,

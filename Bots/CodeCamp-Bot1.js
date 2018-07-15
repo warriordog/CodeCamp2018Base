@@ -88,21 +88,21 @@ function getLeft(direction) {
 
 module.exports = {
     /**
-     * @param {Object} engram
+     * @param {Object} gameState
      * @return {Object} command
      */
-    takeAction: function(engram) {
+    takeAction: function(gameState) {
         // *********************************************************************
         // CODE HERE!
         // *********************************************************************
 
-        if (null == engram) {
+        if (null == gameState) {
             command.action='look';
             command.direction=imFacing;
         } else {
                 // let's see what we saw
-                if (!engram.sight.toLowerCase().includes('lava') &&
-                    !engram.sight.toLowerCase().includes('wall')) {
+                if (!gameState.engram.sight.toLowerCase().includes('lava') &&
+                    !gameState.engram.sight.toLowerCase().includes('wall')) {
                     // no lava, no wall, that's good!
 
                     if ("look" == command.action) {
@@ -113,14 +113,14 @@ module.exports = {
                         lookedRight = false;
                     } else {
                         // we're in motion, so use the sight sense to keep moving quickly
-                        if (openExit(getRight(imFacing), engram.sight)) {
+                        if (openExit(getRight(imFacing), gameState.engram.sight)) {
                             imFacing = getRight(imFacing);
                             command.action = "move";
                             command.direction = imFacing;
-                        } else if (openExit(imFacing, engram.sight)) {
+                        } else if (openExit(imFacing, gameState.engram.sight)) {
                             command.action = "move";
                             command.direction = imFacing;
-                        } else if (openExit(getLeft(imFacing), engram.sight)) {
+                        } else if (openExit(getLeft(imFacing), gameState.engram.sight)) {
                             imFacing = getLeft(imFacing);
                             command.action = "move";
                             command.direction = imFacing;

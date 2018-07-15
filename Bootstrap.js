@@ -74,6 +74,7 @@ function FindMyTeam(error, response, body) {
         if (BootstrapData.teamName == teamList[currentTeam].name) {
             logger.debug(__filename, 'FindMyTeam()', UtilJS.format('Found "%s" with ID %s', BootstrapData.teamName, teamList[currentTeam].id));
             BootstrapData.teamId = teamList[currentTeam].id;
+            BootstrapData.botData = teamList[currentTeam].bots;
             teamFound = true;
             break; // we're done searching!
         }
@@ -244,44 +245,129 @@ function createGame() {
     logger.debug(__filename, 'createGame()', 'Exit Point');
 }
 
-function playGame(gameId, engram) {
+function playGame(gameId, gameState) {
     logger.debug(__filename, 'playGame()', 'Entry Point');
 
     // get the timestamp to help throttle
     var playGameStartTS = Date.now();
 
-    logger.trace(__filename, 'playGame()', UtilJS.format('Engram: %s', engram));
+    logger.trace(__filename, 'playGame()', UtilJS.format('Engram: %s', gameState));
 
-    // TO-DO Bot Input Timer
-    // implement a timer mechanism to avoid anyone taking too long!
+    if (null != gameState) {
+        switch (gameState.playerState) {
+            case 1: {
+                gameState.playerState = "Sitting";
+                break;
+            }
+            case 2: {
+                gameState.playerState = "Standing";
+                break;
+            }            
+            case 4: {
+                gameState.playerState = "Lying";
+                break;
+            }
+            case 8: {
+                gameState.playerState = "Stunned";
+                break;
+            }
+            case 512: {
+                gameState.playerState = "DEAD";
+                break;
+            }
+        }
+    }
 
-    var botCommands = {};
+    var botCommands = [];
     logger.trace(__filename, 'playGame()', UtilJS.format('Iterating over %d bots', BootstrapData.numberOfBots));
     for (var currentBot = 0; currentBot < BootstrapData.numberOfBots; currentBot++) {
         if (BootstrapData.runAllBots || BootstrapData.singleBotToRun == (currentBot+1)) {
             logger.trace(__filename, 'playGame()', UtilJS.format('Asking Bot %d for input', currentBot+1));
-            botCommands[currentBot] = CodeCampBots[currentBot].takeAction(engram);
+            botCommands[currentBot] = CodeCampBots[currentBot].takeAction(gameState);
             logger.trace(__filename, 'playGame()', UtilJS.format('Bot %d says:', currentBot+1));
             logger.trace(__filename, 'playGame()', '  Action: ' + botCommands[currentBot].action);
             logger.trace(__filename, 'playGame()', '  Direction: ' + botCommands[currentBot].direction);
+        } else {
+            botCommands[currentBot] = {action: null, direction: null};
+        }
+    }
+
+    logger.trace(__filename, 'playGame()', 'Weighting results...');
+    var weightedResults = {
+        actions: {},
+        directions: {},
+    };
+    // if (!BootstrapData.runAllBots) {
+    //     logger.trace(__filename, 'playGame()', UtilJS.format('Forcing Bot #%d to 100% weight!', BootstrapData.singleBotToRun));
+    //     weightedResults.direction[botCommands[BootstrapData.singleBotToRun-1].command] = 1;
+    //     weightedResults.actions[botCommands[BootstrapData.singleBotToRun-1].action] = 1;
+    // } else {
+        for (var currentBot = 0; currentBot < botCommands.length; currentBot++) {
+            if (null != botCommands[currentBot].action) {
+                if (botCommands[currentBot].action in weightedResults.actions) {
+                    weightedResults.actions[botCommands[currentBot].action] += BootstrapData.botData[currentBot].weight/100;
+                } else {
+                    weightedResults.actions[botCommands[currentBot].action] = BootstrapData.botData[currentBot].weight/100;
+                }
+            }
+            if (null != botCommands[currentBot].direction) {
+                if (botCommands[currentBot].direction in weightedResults.directions) {
+                    weightedResults.directions[botCommands[currentBot].direction] += BootstrapData.botData[currentBot].weight/100;
+                } else {
+                    weightedResults.directions[botCommands[currentBot].direction] = BootstrapData.botData[currentBot].weight/100;
+                }
+            }
+        }
+    // }
+
+    logger.trace(__filename, 'playGame()', 'Picking highest score...');
+    var winningCommand = {
+        action: {
+            value: null,
+            weight: 0,
+        },
+        direction: {
+            value: null,
+            weight: 0,
+        },
+    };
+    for (var action in weightedResults.actions) {
+        if (weightedResults.actions[action] > winningCommand.action.weight) {
+            winningCommand.action.weight = weightedResults.actions[action];
+            winningCommand.action.value = action;
+        }
+    }
+    for (var direction in weightedResults.directions) {
+        if (weightedResults.directions[direction] > winningCommand.direction.weight) {
+            winningCommand.direction.weight = weightedResults.directions[direction];
+            winningCommand.direction.value = direction;
+        }
+    }
+
+    logger.trace(__filename, 'playGame()', 'Producing cohesion results...');
+    var cohesionScores = [];
+    for (var currentBot = 0; currentBot < botCommands.length; currentBot++) {
+        if (botCommands[currentBot].action != null || botCommands[currentBot].direction != null) {
+            cohesionScores[currentBot] = 0;
+        } else {
+            cohesionScores[currentBot] = null;
+        }
+        
+        if (botCommands[currentBot].action == winningCommand.action.value) {
+            cohesionScores[currentBot] == null ? cohesionScores[currentBot] = 0.5 : cohesionScores[currentBot] += 0.5;
+        }
+        if (botCommands[currentBot].direction == winningCommand.direction.value) {
+            cohesionScores[currentBot] == null ? cohesionScores[currentBot] = 0.5 : cohesionScores[currentBot] += 0.5;
         }
     }
 
     logger.trace(__filename, 'playGame()', 'Making our move!');
 
-    var actionUrl;
-    if (BootstrapData.runAllBots) {
-        // not yet implemented!
-        logger.error(__filename, 'playGame()', 'Running all bots is not yet supported!');
-        actionUrl = UtilJS.format('need URL for Coagulator');
-        process.exit(1);
-    } else {
-        actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/action/%s?act=%s&dir=%s',
-            gameId,
-            botCommands[BootstrapData.singleBotToRun - 1].action,
-            botCommands[BootstrapData.singleBotToRun - 1].direction
-        );
-    }
+    var actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/action/%s?act=%s&dir=%s',
+        gameId,
+        winningCommand.action.value,
+        winningCommand.direction.value
+    );
 
     makeReliableRequest(actionUrl, function(error, response, body) {
         logger.debug(__filename, 'playGame()-callback()', 'Entry Point');
@@ -321,11 +407,11 @@ function playGame(gameId, engram) {
             var delayInMS = BootstrapData.minimumCycleTime - (playGameEndTS - playGameStartTS);
             setTimeout(function() {
                 logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
-                playGame(gameId, responseObj.engram);
+                playGame(gameId, responseObj);
             }, delayInMS);
         } else {
             logger.trace(__filename, 'playGame()-callback()', 'Making our next move!');
-            playGame(gameId, responseObj.engram);    
+            playGame(gameId, responseObj);    
         }
 
         logger.debug(__filename, 'playGame()-callback()', 'Exit Point');
@@ -382,7 +468,7 @@ function makeReliableRequest(theUrl, callback, currentTry) {
                 logger.trace(__filename, 'makeReliableRequest()-callback()', UtilJS.format('Attempting try #%d', currentTry));
                 makeReliableRequest(theUrl, callback, currentTry);
                 return;
-            } // if tries are exceed, TIMEOUT will be passed to the callback() for handling
+            } // if tries are exceeded, TIMEOUT will be passed to the callback() for handling
         }
 
         logger.trace(__filename, 'makeReliableRequest()-callback()', UtilJS.format('Calling %s()...', callback.name));
@@ -391,3 +477,29 @@ function makeReliableRequest(theUrl, callback, currentTry) {
         logger.trace(__filename, 'makeReliableRequest()-callback()', 'Exit Point');
     });
 }
+
+/*
+export function doPost(url: string, body: any, callback: Function) {
+   log.debug(__filename, format('doPost(%s, %s, %s)', url, body, callback.name), format('Requesting [%s] with callback to [%s]', url, callback.name));
+   let options = {
+       url: url,
+       json: body
+   };
+
+   request.post(options, (err, res, body) => {
+       if (err) {
+           log.error(__filename, 'doPost()', format('Error from %s \n::ERROR INFO:: %s', url, JSON.stringify(err)));
+           return err;
+       }
+
+       if (res.statusCode != 200) {
+           log.warn(__filename, 'doPost()', format('Response Code %d (%s) recieved! Discarding response from %s', res.statusCode, res.statusMessage, url));
+           return;
+       }
+
+       // all good, apparently - fire othe callback
+       log.debug(__filename, 'doPost()', format('Response %d (%s) recieved. Calling back to [%s]', res.statusCode, res.statusMessage, callback.name));
+       callback(res, body);
+   });
+}
+*/
