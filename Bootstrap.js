@@ -254,6 +254,7 @@ function playGame(gameId, gameState) {
     logger.trace(__filename, 'playGame()', UtilJS.format('Engram: %s', gameState));
 
     if (null != gameState) {
+        logger.trace(__filename, 'playGame()', UtilJS.format("Parsing player state %d", gameState.playerState));
         switch (gameState.playerState) {
             case 1: {
                 gameState.playerState = "Sitting";
@@ -276,6 +277,8 @@ function playGame(gameId, gameState) {
                 break;
             }
         }
+
+        logger.trace(__filename, 'playGame()', UtilJS.format("Player state = %s", gameState.playerState));
     }
 
     var botCommands = [];
@@ -292,33 +295,40 @@ function playGame(gameId, gameState) {
         }
     }
 
-    logger.trace(__filename, 'playGame()', 'Weighting results...');
+    logger.trace(__filename, 'playGame()', UtilJS.format('Weighting results from %d bots', botCommands.length));
     var weightedResults = {
         actions: {},
         directions: {},
         messages: {},
     };
     for (var currentBot = 0; currentBot < botCommands.length; currentBot++) {
+        logger.trace(__filename, 'playGame()', UtilJS.format('Examining bot #%d', currentBot+1));
         if (null != botCommands[currentBot].action) {
+            logger.trace(__filename, 'playGame()', UtilJS.format('   - weighting action %s', botCommands[currentBot].action));
             if (botCommands[currentBot].action in weightedResults.actions) {
                 weightedResults.actions[botCommands[currentBot].action] += BootstrapData.botData[currentBot].weight/100;
             } else {
                 weightedResults.actions[botCommands[currentBot].action] = BootstrapData.botData[currentBot].weight/100;
             }
+            logger.trace(__filename, 'playGame()', UtilJS.format('     - result: %f', weightedResults.actions[botCommands[currentBot].action]));
         }
         if (null != botCommands[currentBot].direction) {
+            logger.trace(__filename, 'playGame()', UtilJS.format('   - weighting direction %s', botCommands[currentBot].direction));
             if (botCommands[currentBot].direction in weightedResults.directions) {
                 weightedResults.directions[botCommands[currentBot].direction] += BootstrapData.botData[currentBot].weight/100;
             } else {
                 weightedResults.directions[botCommands[currentBot].direction] = BootstrapData.botData[currentBot].weight/100;
             }
+            logger.trace(__filename, 'playGame()', UtilJS.format('     - result: %f', weightedResults.directions[botCommands[currentBot].direction]));
         }
         if (null != botCommands[currentBot].message) {
+            logger.trace(__filename, 'playGame()', UtilJS.format('   - weighting message %s', botCommands[currentBot].message));
             if (botCommands[currentBot].message in weightedResults.messages) {
                 weightedResults.messages[botCommands[currentBot].message] += BootstrapData.botData[currentBot].weight/100;
             } else {
                 weightedResults.messages[botCommands[currentBot].message] = BootstrapData.botData[currentBot].weight/100;
             }
+            logger.trace(__filename, 'playGame()', UtilJS.format('     - result: %f', weightedResults.messages[botCommands[currentBot].message]));
         }
     }
 
@@ -337,20 +347,35 @@ function playGame(gameId, gameState) {
             weight: 0,
         },
     };
+    logger.trace(__filename, 'playGame()', 'Examining actions to determine winner...');
     for (var action in weightedResults.actions) {
+        logger.trace(__filename, 'playGame()', UtilJS.format('  Examining "%s" with weight %f', action, weightedResults.actions[action]));
         if (weightedResults.actions[action] > winningCommand.action.weight) {
+            logger.trace(__filename, 'playGame()', UtilJS.format('    %s has won at %f weight vs. %s at %f weight',
+                action, weightedResults.actions[action], winningCommand.action.value, winningCommand.action.weight
+            ));
             winningCommand.action.weight = weightedResults.actions[action];
             winningCommand.action.value = action;
         }
     }
+    logger.trace(__filename, 'playGame()', 'Examining directions to determine winner...');
     for (var direction in weightedResults.directions) {
+        logger.trace(__filename, 'playGame()', UtilJS.format('  Examining "%s" with weight %f', direction, weightedResults.directions[direction]));
         if (weightedResults.directions[direction] > winningCommand.direction.weight) {
+            logger.trace(__filename, 'playGame()', UtilJS.format('    %s has won at %f weight vs. %s at %f weight',
+                direction, weightedResults.directions[direction], winningCommand.direction.value, winningCommand.direction.weight
+            ));
             winningCommand.direction.weight = weightedResults.directions[direction];
             winningCommand.direction.value = direction;
         }
     }
+    logger.trace(__filename, 'playGame()', 'Examining messages to determine winner...');
     for (var message in weightedResults.messages) {
+        logger.trace(__filename, 'playGame()', UtilJS.format('  Examining "%s" with weight %f', message, weightedResults.messages[message]));
         if (weightedResults.messages[message] > winningCommand.message.weight) {
+            logger.trace(__filename, 'playGame()', UtilJS.format('    %s has won at %f weight vs. %s at %f weight',
+                message, weightedResults.messages[message], winningCommand.message.value, winningCommand.message.weight
+            ));
             winningCommand.message.weight = weightedResults.messages[message];
             winningCommand.message.value = message;
         }
@@ -374,23 +399,20 @@ function playGame(gameId, gameState) {
         if (botCommands[currentBot].message == winningCommand.message.value) {
             cohesionScores[currentBot] == null ? cohesionScores[currentBot] = 0.32 : cohesionScores[currentBot] += 0.32;
         }
+
+        logger.trace(__filename, 'playGame()', UtilJS.format('  Result for Bot #%d = %f', currentBot+1, cohesionScores[currentBot]));
     }
 
-    logger.trace(__filename, 'playGame()', 'Making our move!');
-
-    var actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/action/%s?act=%s&dir=%s',
-        gameId,
-        winningCommand.action.value,
-        winningCommand.direction.value
-    );
-
     // build the interleaved message
+    logger.trace(__filename, 'playGame()', 'Interleaving messages...');
     var interleavedMessage = "";
     for (var message in weightedResults.messages) {
+        logger.trace(__filename, 'playGame()', UtilJS.format('  Interleaving "%s" with "%s"', message, interleavedMessage));
         if (null != message) {
             interleavedMessage = interleaveText(interleavedMessage, message);
         }
     }
+    logger.trace(__filename, 'playGame()', UtilJS.format('Interleaving result = "%s"', interleavedMessage));
 
     var actionPayload = JSON.stringify({
         gameId: gameId,
@@ -400,6 +422,13 @@ function playGame(gameId, gameState) {
         cohesionScores: cohesionScores,
     });
 
+    var actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/action/%s?act=%s&dir=%s',
+        gameId,
+        winningCommand.action.value,
+        winningCommand.direction.value
+    );
+
+    logger.trace(__filename, 'playGame()', 'Making our move!');
     makeReliableRequest(actionUrl, function(error, response, body) {
         logger.debug(__filename, 'playGame()-callback()', 'Entry Point');
         if (null != error) {
@@ -510,24 +539,37 @@ function makeReliableRequest(theUrl, callback, currentTry) {
 }
 
 function makeReliablePost(theUrl, postBody, callback, currentTry) {
-   var options = {
-       url: theUrl,
-       json: postBody,
-       timeout: 6000,
-   };
+    logger.debug(__filename, 'makeReliablePost()', UtilJS.format("Calling %s", theUrl));
+    logger.trace(__filename, 'makeReliablePost()', UtilJS.format("  Body: %s", postBody));
+    var options = {
+        url: theUrl,
+        json: postBody,
+        timeout: 6000,
+    };
 
-   req.post(options, (err, res, body) => {
-       if (err) {
-           return err;
-       }
+    req.post(options, function(error, response, body) {
+        logger.trace(__filename, 'makeReliablePost()-callback()', 'Entry Point');
 
-       if (res.statusCode != 200) {
-           return;
-       }
+        if (null != error && error.code == "ETIMEDOUT") {
+            logger.warn(__filename, 'makeReliablePost()-callback()', 'REQUEST TIMED OUT! Trying to recover...');
+            if (null == currentTry) {
+                currentTry = 1;
+            } else {
+                currentTry++;
+            }
 
-       // all good, apparently - fire othe callback
-       callback(res, body);
-   });
+            if (currentTry < 10) {
+                logger.trace(__filename, 'makeReliablePost()-callback()', UtilJS.format('Attempting try #%d', currentTry));
+                makeReliablePost(theUrl, postBody, callback, currentTry);
+                return;
+            } // if tries are exceeded, TIMEOUT will be passed to the callback() for handling
+        }
+
+        logger.trace(__filename, 'makeReliablePost()-callback()', UtilJS.format('Calling %s()...', callback.name));
+        callback(error, response, body);
+
+        logger.trace(__filename, 'makeReliablePost()-callback()', 'Exit Point');
+    });
 }
 
 function interleaveText(str1, str2) {

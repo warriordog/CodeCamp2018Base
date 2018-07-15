@@ -11,7 +11,8 @@
         "max-len": "off",
         "no-multiple-empty-lines": "off",
         "quotes": "off",
-        "no-trailing-spaces": "off"
+        "no-trailing-spaces": "off",
+        "guard-for-in": "off"
     },
     "env": {
         "node" : true
