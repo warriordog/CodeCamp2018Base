@@ -8,10 +8,10 @@ var command = {
 
 module.exports = {
     /**
-     * @param {Object} engram
+     * @param {Object} gameState
      * @return {Object} command
      */
-    takeAction: function(engram) {
+    takeAction: function(gameState) {
         // *********************************************************************
         // CODE HERE!
         // *********************************************************************

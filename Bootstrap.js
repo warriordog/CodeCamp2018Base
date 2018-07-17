@@ -157,12 +157,24 @@ function ParseActiveGames(error, response, body) {
     for (var currentGame = 0; currentGame < games.length; currentGame++) {
         logger.trace(__filename, 'ParseActiveGames()', UtilJS.format('Checking game #%d with id %s', currentGame, games[currentGame].gameId));
         logger.trace(__filename, 'ParseActiveGames()', UtilJS.format('Team for this game is %s', games[currentGame].team.id));
-        if (BootstrapData.teamId == games[currentGame].team.id) {
-            // the given team already has a game in progress, end it!
-            logger.debug(__filename, 'ParseActiveGames()', UtilJS.format('Game with ID %s matched our team, terminating it!', games[currentGame].gameId));
-            shutdownGame(games[currentGame].gameId, pickMaze);
-            gameFound = true; // we found an active game
-            break; // assume there could only be one active game...might not be right!
+        logger.trace(__filename, 'ParseActiveGames()', UtilJS.format('Bot for this game is %s', games[currentGame].score.botId));
+        if (BootstrapData.runAllBots) {
+            if (BootstrapData.teamId == games[currentGame].team.id && games[currentGame].score.botId == "") {
+                // the given team already has a game in progress, end it!
+                logger.debug(__filename, 'ParseActiveGames()', UtilJS.format('Game with ID %s matched our team, terminating it!', games[currentGame].gameId));
+                shutdownGame(games[currentGame].gameId, pickMaze);
+                gameFound = true; // we found an active game
+                break; // assume there could only be one active game...might not be right!
+            }
+        } else {
+            if (BootstrapData.teamId == games[currentGame].team.id &&
+                BootstrapData.botData[BootstrapData.singleBotToRun-1].id == games[currentGame].score.botId) {
+                // the given team already has a game in progress, end it!
+                logger.debug(__filename, 'ParseActiveGames()', UtilJS.format('Game with ID %s matched our team, terminating it!', games[currentGame].gameId));
+                shutdownGame(games[currentGame].gameId, pickMaze);
+                gameFound = true; // we found an active game
+                break; // assume there could only be one active game...might not be right!
+            }
         }
     }
 
@@ -279,7 +291,17 @@ function createGame() {
     logger.trace(__filename, 'createGame()', UtilJS.format('Creating game with:'));
     logger.trace(__filename, 'createGame()', UtilJS.format('  MazeID: %s', BootstrapData.mazeId));
     logger.trace(__filename, 'createGame()', UtilJS.format('  TeamID: %s', BootstrapData.teamId));
-    makeRequest('http://game.code-camp-2018.com/game/new/' + BootstrapData.mazeId + '/' + BootstrapData.teamId + '/', function(error, response, body) {
+    var actionUrl;
+    if (!BootstrapData.runAllBots) {
+        logger.trace(__filename, 'createGame()', UtilJS.format('  BotID: %s', BootstrapData.botData[BootstrapData.singleBotToRun-1].id));
+        actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/new/%s/%s/%s/',
+            BootstrapData.mazeId, BootstrapData.teamId, BootstrapData.botData[BootstrapData.singleBotToRun-1].id);
+    } else {
+        actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/new/%s/%s/',
+            BootstrapData.mazeId, BootstrapData.teamId);
+    }
+
+    makeRequest(actionUrl, function(error, response, body) {
         logger.debug(__filename, 'createGame()-callback()', 'Entry Point');
         if (undefined != error || undefined == body || body.includes("Error creating")) {
             logger.error(__filename, 'createGame()-callback()', 'Error creating game: ' + error + ";" + body);
