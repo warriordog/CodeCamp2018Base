@@ -18,6 +18,7 @@ delete require.cache['Logger.js'];
 delete require.cache['data/data.json'];
 
 // load utilities
+require('dotenv').config();
 var LoggerJS = require('./Logger.js');
 var UtilJS = require('util');
 var fs = require('fs'); // file system - allows reading and writing files
@@ -41,6 +42,10 @@ var BootstrapData =
     minimumCycleTime: 10,
     numberOfBots: 6,
 };
+
+
+const GAME_SERVER_URL = process.env.GAME_SERVER_URL || 'http://game.code-camp-2018.com';
+const SCORE_SERVER_URL = process.env.SCORE_SERVER_URL || 'http://score.code-camp-2018.com';
 
 // configure the logger
 var logger = LoggerJS.Logger.getInstance(); // simple logging wrapper
@@ -101,7 +106,7 @@ for (var currentBot = 0; currentBot < BootstrapData.numberOfBots; currentBot++) 
 
 // try to find this team
 logger.trace(__filename, '', "Retrieving team list...");
-makeRequest('http://game.code-camp-2018.com/teams', FindMyTeam);
+makeRequest(GAME_SERVER_URL + '/teams', FindMyTeam);
 
 function FindMyTeam(error, response, body) {
     logger.debug(__filename, 'FindMyTeam()', 'Entry Point');
@@ -137,7 +142,7 @@ function FindMyTeam(error, response, body) {
 
     // is there already an active game for this team?
     logger.trace(__filename, 'FindMyTeam()', 'Looking for active games now...');
-    makeRequest('http://game.code-camp-2018.com/games/', ParseActiveGames);
+    makeRequest(GAME_SERVER_URL + '/games/', ParseActiveGames);
 
     logger.debug(__filename, 'FindMyTeam()', 'Exit Point');
 }
@@ -232,7 +237,7 @@ function pickMaze(wonLastMaze) {
     } else {
         // we've got some work to do...
         logger.trace(__filename, 'pickMaze()', 'Requesting the list of scores from the server for our team');
-        req('http://score.code-camp-2018.com/get?teamId=' + BootstrapData.teamId, function(error, response, body) {
+        req(SCORE_SERVER_URL + '/get?teamId=' + BootstrapData.teamId, function(error, response, body) {
             logger.debug(__filename, 'pickMaze()-callback()', 'Entry Point');
 
             if (undefined != error) {
@@ -294,10 +299,10 @@ function createGame() {
     var actionUrl;
     if (!BootstrapData.runAllBots) {
         logger.trace(__filename, 'createGame()', UtilJS.format('  BotID: %s', BootstrapData.botData[BootstrapData.singleBotToRun-1].id));
-        actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/new/%s/%s/%s/',
+        actionUrl = UtilJS.format(GAME_SERVER_URL + '/game/new/%s/%s/%s/',
             BootstrapData.mazeId, BootstrapData.teamId, BootstrapData.botData[BootstrapData.singleBotToRun-1].id);
     } else {
-        actionUrl = UtilJS.format('http://game.code-camp-2018.com/game/new/%s/%s/',
+        actionUrl = UtilJS.format(GAME_SERVER_URL + '/game/new/%s/%s/',
             BootstrapData.mazeId, BootstrapData.teamId);
     }
 
@@ -312,7 +317,7 @@ function createGame() {
         logger.trace(__filename, 'createGame()-callback()', UtilJS.format('Parsing JSON: %s', body));
         var game = JSON.parse(body);
         logger.trace(__filename, 'createGame()-callback()', UtilJS.format('Game URL = %s', game.url));
-        var gameId = game.url.replace("http://game.code-camp-2018.com:80/game/", "");
+        var gameId = game.gameId;
         logger.debug(__filename, 'createGame()-callback()', UtilJS.format('New Game with ID %s created!', gameId));
 
         logger.debug(__filename, 'createGame()-callback()', 'We\'re ready to play the game!');
@@ -501,7 +506,7 @@ function playGame(gameId, gameState) {
     };
 
     logger.trace(__filename, 'playGame()', 'Making our move!');
-    makeReliablePost('http://game.code-camp-2018.com/game/action/', actionPayload, function(error, response, body) {
+    makeReliablePost(GAME_SERVER_URL + '/game/action/', actionPayload, function(error, response, body) {
         logger.debug(__filename, 'playGame()-callback()', 'Entry Point');
         if (null != error) {
             logger.error(__filename, 'playGame()-callback()', "Error executing action request: " + error);
