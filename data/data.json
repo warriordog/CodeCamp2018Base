@@ -1,7 +1,0 @@
-{
-    "runOneBot": true,
-    "botToRun": 1,
-    "specificMaze": null,
-    "playAllMazes": true,
-    "logLevel": "TRACE"
-}
