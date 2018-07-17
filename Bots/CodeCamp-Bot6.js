@@ -1,4 +1,5 @@
 'use strict';
+// Stephen Hall
 
 var command = {
     action: null,
