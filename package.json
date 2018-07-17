@@ -9,6 +9,7 @@
   "author": "James Dean <james_dean@bcbst.com>; Stephen Hall <stephen_hall@bcbst.com>",
   "license": "none",
   "dependencies": {
+    "dotenv": "^6.0.0",
     "eslint": "^4.19.1",
     "eslint-config-google": "^0.9.1",
     "request": "^2.87.0"
