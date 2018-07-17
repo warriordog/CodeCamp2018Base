@@ -15,17 +15,66 @@
  */ 
 
 delete require.cache['Logger.js'];
-delete require.cache['data/init.json'];
+delete require.cache['data/data.json'];
 
 // load utilities
 var LoggerJS = require('./Logger.js');
 var UtilJS = require('util');
-var BootstrapData = require('./data/data');
+var fs = require('fs'); // file system - allows reading and writing files
+var BootstrapData = 
+{
+    // these can be overridden by the camper's data file
+    runAllBots: true,
+    singleBotToRun: null,
+    specificMaze: null,
+    startAtBeginningOfMazeList: false,
+
+    // set at the repository level, shouldn't be changed by teams
+    teamName: "Team Charlie",
+    mazes: [
+        "3:3:TinyTim",
+        "10:10:SlipperyDevil",
+        "10:10:SnarkyShark",
+        "10:10:Snippy",
+        "20:20:ZippyZoomer",
+    ],
+    minimumCycleTime: 10,
+    numberOfBots: 6,
+};
 
 // configure the logger
 var logger = LoggerJS.Logger.getInstance(); // simple logging wrapper
-logger.setLogLevel(LoggerJS.LOG_LEVELS["TRACE"]);
+logger.setLogLevel(LoggerJS.LOG_LEVELS["DEBUG"]);
 logger.trace(__filename, '', 'Logger initialized...');
+
+if (fs.existsSync('./data/data.json')) {
+    logger.debug(__filename, '', 'Override data exists, loading...');
+    var OverrideData = require('./data/data');
+
+    // override Bootstrap data
+    if (OverrideData.runOneBot === true &&
+        null != OverrideData.botToRun &&
+        OverrideData.botToRun > 0 &&
+        OverrideData.botToRun <= BootstrapData.numberOfBots) {
+        logger.debug(__filename, '', UtilJS.format('Running only bot #%d.', OverrideData.botToRun));
+        BootstrapData.runAllBots = false;
+        BootstrapData.singleBotToRun = OverrideData.botToRun;
+    }
+    if (OverrideData.specificMaze != null) {
+        logger.debug(__filename, '', UtilJS.format('Running only maze %s.', OverrideData.specificMaze));
+        BootstrapData.specificMaze = OverrideData.specificMaze;
+    } else if (OverrideData.playAllMazes === true) {
+        logger.debug(__filename, '', 'Running all mazes.');
+        BootstrapData.startAtBeginningOfMazeList = true;
+    }
+    if (OverrideData.logLevel != null &&
+        (OverrideData.logLevel == "NONE" || OverrideData.logLevel == "ERROR" ||
+        OverrideData.logLevel == "WARN" || OverrideData.logLevel == "INFO" ||
+        OverrideData.logLevel == "DEBUG" || OverrideData.logLevel == "TRACE")) {
+        logger.debug(__filename, '', UtilJS.format('Setting log level to %s.', OverrideData.logLevel));
+        logger.setLogLevel(LoggerJS.LOG_LEVELS[OverrideData.logLevel]);
+    }
+}
 
 // Load the required modules
 logger.trace(__filename, '', 'Load "request" library...');

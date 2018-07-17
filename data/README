@@ -1,0 +1,38 @@
+Create a file in this directory named "data.json" in order to control your bot's behavior.
+The file should contain everything between the dashes below (do not include the dashes!):
+
+---------------------------------------------------
+{
+    "runOneBot": true,
+    "botToRun": 1,
+    "specificMaze": null,
+    "playAllMazes": false,
+    "logLevel": "DEBUG"
+}
+---------------------------------------------------
+
+Here are the values and what they mean:
+
+  - runOneBot
+      Set this to either "true" or "false". You will want to set this to "true" to test only
+      your code.
+
+  - botToRun
+      If runOneBot is "true", then this value should be your bot number (1-6)
+
+  - specificMaze
+      If you want to run through all the mazes, set this value to "null"
+      If you want to run your bot through only one specific maze, enter the maze key here.
+      For example: "3:3:TinyTim"
+
+  - playAllMazes
+      If you want to ignore the mazes you've already won, set this to "true". Otherwise, keep at "false".
+
+  - logLevel
+      If you're having trouble, we may want to "turn up" the logging level. Here are the possible values:
+        NONE  - no logging, faster speed but harder to troubleshoot!
+        ERROR - only errors are logged
+        WARN  - only warnings and errors are logged
+        INFO  - warning, errors and information is logged - THIS IS RECOMMENDED WHEN DONE TROUBLESHOOTING!
+        DEBUG - debug messages are written - THIS IS RECOMMENDED FOR TROUBLESHOOTING
+        TRACE - this is really only useful to the instructors, tons of data is produced!

@@ -1,18 +1,7 @@
 {
-    "teamName": "Team Charlie",
-    "runAllBots": true,
-    "singleBotToRun": 2,
-
+    "runOneBot": true,
+    "botToRun": 1,
     "specificMaze": null,
-    "startAtBeginningOfMazeList": true,
-
-    "mazes": [
-        "3:3:TinyTim",
-        "10:10:SlipperyDevil",
-        "10:10:SnarkyShark",
-        "10:10:Snippy",
-        "20:20:ZippyZoomer"
-    ],
-    "minimumCycleTime": 10,
-    "numberOfBots": 6
+    "playAllMazes": true,
+    "logLevel": "TRACE"
 }
