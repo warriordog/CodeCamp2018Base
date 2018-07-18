@@ -43,7 +43,6 @@ var BootstrapData =
     numberOfBots: 6,
 };
 
-
 const GAME_SERVER_URL = process.env.GAME_SERVER_URL || 'http://game.code-camp-2018.com';
 const SCORE_SERVER_URL = process.env.SCORE_SERVER_URL || 'http://score.code-camp-2018.com';
 
