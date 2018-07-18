@@ -1,5 +1,5 @@
 'use strict';
-// Stephen Hall
+// Russell Estes
 
 var command = {
     action: null,
