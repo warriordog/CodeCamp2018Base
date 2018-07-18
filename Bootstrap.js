@@ -31,7 +31,7 @@ var BootstrapData =
     startAtBeginningOfMazeList: false,
 
     // set at the repository level, shouldn't be changed by teams
-    teamName: "Team Charlie",
+    teamName: "Intern Invasion",
     mazes: [
         "3:3:TinyTim",
         "10:10:SlipperyDevil",
