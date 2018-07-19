@@ -4,7 +4,7 @@ The file should contain everything between the dashes below (do not include the 
 ---------------------------------------------------
 {
     "runOneBot": true,
-    "botToRun": 1,
+    "botToRun": 6,
     "specificMaze": null,
     "playAllMazes": false,
     "logLevel": "DEBUG"
@@ -36,3 +36,6 @@ Here are the values and what they mean:
         INFO  - warning, errors and information is logged - THIS IS RECOMMENDED WHEN DONE TROUBLESHOOTING!
         DEBUG - debug messages are written - THIS IS RECOMMENDED FOR TROUBLESHOOTING
         TRACE - this is really only useful to the instructors, tons of data is produced!
+
+same team, same maze - how to pull maze up browser?
+Kids needs to be able to make sure they are looking at their own maze

@@ -33,11 +33,12 @@ var BootstrapData =
     // set at the repository level, shouldn't be changed by teams
     teamName: "Intern Invasion",
     mazes: [
-        "3:3:TinyTim",
-        "10:10:SlipperyDevil",
-        "10:10:SnarkyShark",
-        "10:10:Snippy",
-        "20:20:ZippyZoomer",
+        "3:3:TinyTina",
+        "5:5:LittleLama",
+        "10:15:McRibXtraValueMeal",
+        "15:15:FingerTrap",
+        "15:20:TwoFingerTrap",
+        "20:20:ToeTrap",
     ],
     minimumCycleTime: 10,
     numberOfBots: 6,
@@ -88,8 +89,10 @@ var req = require('request');
 logger.trace(__filename, '', 'Load Code Camp bots...');
 var CodeCampBots = [];
 for (var currentBot = 0; currentBot < BootstrapData.numberOfBots; currentBot++) {
-    logger.trace(__filename, '', UtilJS.format('Loading Bot #%d', currentBot+1));
-    CodeCampBots[currentBot] = require(UtilJS.format('./Bots/CodeCamp-Bot%d', currentBot+1));
+    if (BootstrapData.runAllBots || BootstrapData.singleBotToRun == (currentBot + 1)) {
+        logger.trace(__filename, '', UtilJS.format('Loading Bot #%d', currentBot + 1));
+        CodeCampBots[currentBot] = require(UtilJS.format('./Bots/CodeCamp-Bot%d', currentBot + 1));
+}
 }
 
 // BASIC FLOW
@@ -385,7 +388,7 @@ function playGame(gameId, gameState) {
             logger.trace(__filename, 'playGame()', '  Action: ' + botCommands[currentBot].action);
             logger.trace(__filename, 'playGame()', '  Direction: ' + botCommands[currentBot].direction);
         } else {
-            botCommands[currentBot] = {action: null, direction: null};
+            botCommands[currentBot] = {action: null, direction: null, message: null};
         }
     }
 
@@ -478,6 +481,7 @@ function playGame(gameId, gameState) {
     logger.trace(__filename, 'playGame()', 'Producing cohesion results...');
     var cohesionScores = [];
     for (var currentBot = 0; currentBot < botCommands.length; currentBot++) {
+        if (BootstrapData.runAllBots || BootstrapData.singleBotToRun == (currentBot+1)) {
         if (botCommands[currentBot].action != null || botCommands[currentBot].direction != null) {
             cohesionScores[currentBot] = 0;
         } else {
@@ -493,7 +497,9 @@ function playGame(gameId, gameState) {
         if (botCommands[currentBot].message == winningCommand.message.value) {
             cohesionScores[currentBot] == null ? cohesionScores[currentBot] = 0.32 : cohesionScores[currentBot] += 0.32;
         }
-
+        } else {
+            cohesionScores[currentBot] = 0;
+        }
         logger.trace(__filename, 'playGame()', UtilJS.format('  Result for Bot #%d = %f', currentBot+1, cohesionScores[currentBot]));
     }
 
