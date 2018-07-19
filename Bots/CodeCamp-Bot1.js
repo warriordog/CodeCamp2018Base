@@ -26,19 +26,17 @@ const WALL_UKNOWN = -1;
 const WALL_PRESENT = 0;
 const WALL_ABSENT = 1;
 
-var command = {
-    action: null,
-    direction: null,
-    message: "trying",
-};
-
-var imFacing = "north";
+const PATTERN_WALLS = /exits to the\\W*(north)?(?:\\W|and)*(south)?(?:\\W|and)*(east)?(?:\\W|and)*(west)?\\./;
 
 // 2D array of cells
 var maze = null;
 
 var mazeWidth = 0;
 var mazeHeight = 0;
+
+var playerX = 0;
+var playerY = 0;
+var playerDir = null;
 
 /*
 var maze = new Array(10);
@@ -216,6 +214,16 @@ function addWall(x, y, dir) {
     var neighbor = getCellByDir(x, y, dir);
     if (neighbor != null) {
         neighbor.walls[invertDir(dir)] = WALL_PRESENT;
+    }
+}
+
+function removeWall(x, y, dir) {
+    var cell = maze[x][y];
+    cell.walls[dir] = WALL_ABSENT;
+
+    var neighbor = getCellByDir(x, y, dir);
+    if (neighbor != null) {
+        neighbor.walls[invertDir(dir)] = WALL_ABSENT;
     }
 }
 
@@ -437,9 +445,81 @@ function initMaze(gameState) {
     }
 }
 
+//update player location
+function updateLocation(location) {
+    playerX = location.row;
+    playerY = location.col;
+}
+
+// updates walls by sight
+function updateWalls(sight, x, y) {
+    // match the regex
+    var matches = PATTERN_WALLS.exec(sight);
+    
+    // loop through each match, starting at first group
+    for (var i = 1; i < matches.length; i++) {
+        var match = matches[i].toLowerCase();
+        switch (match) {
+            case "north":
+                addWall(x, y, 'north')
+                break;
+            case "east":
+                addWall(x, y, 'east')
+                break;
+            case "south":
+                addWall(x, y, 'south')
+                break;
+            case "west":
+                addWall(x, y, 'west')
+                break;
+            default:
+                console.log("Bad wall: '" + match + "' from '" + sight + "'.");
+                break;
+        }
+    }
+    
+    // set remaining walls to open
+    if (maze[x][y].walls['north'] == WALL_UNKNOWN) {
+        removeWall(x, y, 'north');
+    }
+    if (maze[x][y].walls['south'] == WALL_UNKNOWN) {
+        removeWall(x, y, 'south');
+    }
+    if (maze[x][y].walls['east'] == WALL_UNKNOWN) {
+        removeWall(x, y, 'east');
+    }
+    if (maze[x][y].walls['west'] == WALL_UNKNOWN) {
+        removeWall(x, y, 'west');
+    }
+}
+
 // Parses an engram and updates the maze data
 function parseEngram(engram) {
-    updateWalls()
+    var x = playerX;
+    var y = playerY;
+    
+    // update direction
+    if (engram.direction.toLowerCase() != playerDir) {
+        console.log("Turning to " + engram.direction);
+        
+        playerDir = engram.direction.toLowerCase();
+    }
+    
+    // if we were LOOKing
+    if (engram.action == "LOOK") {
+        // then switch coordinates to the target block
+        x += getOffsetX(direction)
+        y += getOffsetY(direction)
+    }
+    
+    // update walls
+    if (isInBounds(x, y)) {
+        updateWalls(engram.sight, x, y)
+    } else {
+        console.log("Looked out of bounds: " + x + "," + y);
+    }
+    
+    // update location and position
 }
 
 module.exports = {
@@ -452,18 +532,37 @@ module.exports = {
         // CODE HERE!
         // *********************************************************************
 
+
+        var command = {
+            action: null,
+            direction: null,
+            message: "not doing nothing",
+        };
+
         // If we are just starting the maze, then look
         if (null == gameState) {
-            command.action='look';
-            command.direction=imFacing;
+            console.log("Making first look");
+            
+            command.action = "look";
+            command.direction = "none";
+            command.message = "first look"
         } else {
             // if this is first action, then build maze
             if (maze == null) {
+                console.log("Initializing maze");
+                
                 initMaze(gameState);
             }
             
+            console.log("Updating game model");
+            
+            // update bot location
+            updateLocation(gameState.location);
+            
             // parse the engram and update maze
-            parseEngram(gameState.engram)    
+            parseEngram(gameState.engram); 
+            
+            
             
         /*
                 // let's see what we saw
@@ -514,6 +613,7 @@ module.exports = {
                 */
             }
         
+        // always return the command
         return command;
 
         // *********************************************************************
