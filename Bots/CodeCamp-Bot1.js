@@ -1,6 +1,6 @@
 'use strict';
 
-const MAX_DIST 3
+const MAX_DIST = 3;
 const DIST_UNKNOWN = -2;
 const DIST_SAFE = -1;
 const DIST_HERE = 0;

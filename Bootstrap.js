@@ -33,11 +33,12 @@ var BootstrapData =
     // set at the repository level, shouldn't be changed by teams
     teamName: "Intern Invasion",
     mazes: [
-        "3:3:TinyTim",
-        "10:10:SlipperyDevil",
-        "10:10:SnarkyShark",
-        "10:10:Snippy",
-        "20:20:ZippyZoomer",
+        "3:3:TinyTina",
+        "5:5:LittleLama",
+        "10:15:McRibXtraValueMeal",
+        "15:15:FingerTrap",
+        "15:20:TwoFingerTrap",
+        "20:20:ToeTrap",
     ],
     minimumCycleTime: 10,
     numberOfBots: 6,
