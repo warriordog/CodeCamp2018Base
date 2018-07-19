@@ -4,7 +4,7 @@
  * Bot 1 - Chris Koehler
  */
 
-const MAX_DIST 3
+const MAX_DIST = 3;
 const DIST_UNKNOWN = -2;
 const DIST_SAFE = -1;
 const DIST_HERE = 0;
@@ -26,7 +26,7 @@ const CONF_NEUTRAL = 0.5;
 const CONF_GOOD = 0.75;
 const CONF_BEST = 1.0;
 
-const WALL_UKNOWN = -1;
+const WALL_UNKNOWN = -1;
 const WALL_PRESENT = 0;
 const WALL_ABSENT = 1;
 
@@ -184,7 +184,7 @@ function getOffsetY(dir) {
     return 0;
 }
 
-function getCellbyDir(x, y, dir) {
+function getCellByDir(x, y, dir) {
     var nX = x + getOffsetX(dir);
     var nY = y + getOffsetY(dir);
 
@@ -240,12 +240,12 @@ function canMoveInDir(x, y, dir) {
     }
 
     // check bounds
-    return getCellbyDir(x, y, dir) != null;
+    return getCellByDir(x, y, dir) != null;
 }
 
 function shouldMoveInDir(x, y, dir) {
     if (canMoveInDir(x, y, dir)) {
-        var next = getCellbyDir(x, y, dir);
+        var next = getCellByDir(x, y, dir);
         if (next.fire == DIST_HERE) {
             return false;
         }
@@ -258,7 +258,7 @@ function shouldMoveInDir(x, y, dir) {
 function createZeroRating() {
     return {
         rating: RATING_IMPOSSIBLE,
-        confidence: CONF_BEST
+        confidence: CONF_BEST,
     };
 }
 
@@ -293,7 +293,7 @@ function calcFireConf(fire) {
     return Math.min(CONF_GOOD, (fire / (MAX_DIST + 1)) * CONF_GOOD);
 }
 
-//pits
+// pits
 function calcPitRate(pit) {
     if (pit == DIST_UNKNOWN) {
         return RATING_NEUTRAL;
@@ -325,7 +325,7 @@ function calcVisitedRate(visited) {
         return RATING_WORST;
     }
     if (visited == OBSERVED_LOOKED) {
-        return RATING_NEUTRAL
+        return RATING_NEUTRAL;
     }
     return RATING_BEST;
 }
@@ -393,8 +393,8 @@ function getCellRating(cell) {
 
     return {
         confidence: confidence,
-        rating: rating
-    }
+        rating: rating,
+    };
 }
 
 function getCellRating(x, y) {
@@ -439,17 +439,17 @@ function initMaze(gameState) {
                 start: DIST_UNKNOWN,
                 
                 walls: {
-                    north: WALL_UKNOWN,
-                    east: WALL_UKNOWN,
-                    south: WALL_UKNOWN,
-                    west: WALL_UKNOWN
-                }
+                    north: WALL_UNKNOWN,
+                    east: WALL_UNKNOWN,
+                    south: WALL_UNKNOWN,
+                    west: WALL_UNKNOWN,
+                },
             };
         }
     }
 }
 
-//update player location
+// update player location
 function updateLocation(location) {
     playerX = location.row;
     playerY = location.col;
@@ -465,16 +465,16 @@ function updateWalls(sight, x, y) {
         var match = matches[i].toLowerCase();
         switch (match) {
             case "north":
-                addWall(x, y, 'north')
+                addWall(x, y, 'north');
                 break;
             case "east":
-                addWall(x, y, 'east')
+                addWall(x, y, 'east');
                 break;
             case "south":
-                addWall(x, y, 'south')
+                addWall(x, y, 'south');
                 break;
             case "west":
-                addWall(x, y, 'west')
+                addWall(x, y, 'west');
                 break;
             default:
                 console.log("Bad wall: '" + match + "' from '" + sight + "'.");
@@ -512,13 +512,13 @@ function parseEngram(engram) {
     // if we were LOOKing
     if (engram.action == "LOOK") {
         // then switch coordinates to the target block
-        x += getOffsetX(direction)
-        y += getOffsetY(direction)
+        x += getOffsetX(playerDir);
+        y += getOffsetY(playerDir);
     }
     
     // update walls
     if (isInBounds(x, y)) {
-        updateWalls(engram.sight, x, y)
+        updateWalls(engram.sight, x, y);
     } else {
         console.log("Looked out of bounds: " + x + "," + y);
     }
@@ -549,7 +549,7 @@ module.exports = {
             
             command.action = "look";
             command.direction = "none";
-            command.message = "first look"
+            command.message = "first look";
         } else {
             // if this is first action, then build maze
             if (maze == null) {
