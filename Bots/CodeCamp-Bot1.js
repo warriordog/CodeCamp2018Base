@@ -1,5 +1,9 @@
 'use strict';
 
+/*
+ * Bot 1 - Chris Koehler
+ */
+
 const MAX_DIST 3
 const DIST_UNKNOWN = -2;
 const DIST_SAFE = -1;
