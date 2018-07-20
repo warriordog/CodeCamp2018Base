@@ -35,14 +35,27 @@ const WALL_ABSENT = 1;
 const DIRECTIONS = ['north', 'south', 'east', 'west'];
 const ALL_DIRECTIONS = ['north', 'south', 'east', 'west', 'none'];
 
+const SENSES = ['sight', 'sound', 'smell', 'touch', 'taste'];
+const TRAPS = ['fire', 'pit', 'lava'];
+
 const PATTERN_WALLS = /exits to the\W*(north)?(?:\W|and)*(south)?(?:\W|and)*(east)?(?:\W|and)*(west)?\./i;
 const PATTERN_EXIT = /(?:the exit) to the (south|north|east|west)/i;
-const PATTERN_LAVA_SIGHT = /lava.*(north|south|east|west)/i;
-const PATTERN_LAVA_SOUND = /lava.*(north|south|east|west)/i;
-const PATTERN_LAVA_SMELL = /molten rock.*(north|south|east|west)/i;
-const PATTERN_LAVA_TOUCH = /threatening warmth.*(north|south|east|west)/i;
 const PATTERN_WON = /safely exit the maze/i;
-const PATTERN_FIRE = /rythmic.*(north|south|east|west)/i;
+const PATTERNS_TRAPS = {
+    fire: {
+        sound: /rhythmically clicking and hissing.*(north|south|east|west)/i,
+    },
+    lava: {
+        sight: /lava.*(north|south|east|west)/i,
+        sound: /lava.*(north|south|east|west)/i,
+        smell: /molten rock.*(north|south|east|west)/i,
+        touch: /threatening warmth.*(north|south|east|west)/i,
+    },
+    pit: {
+        sound: /echoing wind.*(north|south|east|west)/i,
+        touch: /cool, wet breeze.*(north|south|east|west)/i,
+    },
+};
 
 // 2D array of cells
 var maze = null;
@@ -581,76 +594,86 @@ function observeCell(x, y, visited) {
     }
 }
 
-function lookForTraps(x, y, engram) {
-    if (isInBounds(x, y)) {
-        var fireMatched = [];
-        var lavaMatched = [];
-        var pitMatched = [];
-
-        // Check for lava
-        [PATTERN_LAVA_SIGHT, PATTERN_LAVA_SMELL, PATTERN_LAVA_SOUND, PATTERN_LAVA_TOUCH].forEach(function(pattern) {
-            // match the regex
-            // TODO fix for non-sound
-            var matches = pattern.exec(engram.sound);
-
-            if (matches != null) {
-                if (matches.length == 2 && matches[1]) {
-                    var dir = matches[1];
-                    lavaMatched.push(dir);
-
-                    // add the cell that the lava is in
-                    var cell = getCellByDir(x, y, dir);
-                    if (cell != null) {
-                        cell.lava = TRAP_HERE;
-                    } else {
-                        console.log("[Engram] [WARN] Found trap out of bounds: " + x + "," + y + "->" + dir);
-                    }
-
-                    // TODO update neighbors
-                } else {
-                    console.log("[Engram] [WARN] Pattern matched but had wrong number of groups: " + pattern);
-                }
-            }
-        });
-
-        var fireMatched = [];
-
-        // Check for fire
-        var matches = PATTERN_FIRE.exec(engram.sound);
+function checkForTrap(x, y, pattern, sense, trap) {
+    if (pattern[sense]) {
+        var matches = pattern.exec(sense);
 
         if (matches != null) {
             if (matches.length == 2 && matches[1]) {
                 var dir = matches[1];
-                fireMatched.push(dir);
 
-                // add the cell that the fire is in
+                // add the cell that the lava is in
                 var cell = getCellByDir(x, y, dir);
                 if (cell != null) {
-                    cell.fire = TRAP_HERE;
+                    cell.trap = TRAP_HERE;
+
+                    return true;
                 } else {
                     console.log("[Engram] [WARN] Found trap out of bounds: " + x + "," + y + "->" + dir);
                 }
-
                 // TODO update neighbors
             } else {
                 console.log("[Engram] [WARN] Pattern matched but had wrong number of groups: " + pattern);
             }
         }
+    }
 
-        DIRECTIONS.forEach(function(dir) {
-            // mark cell as safe
-            var cell = getCellByDir(x, y, dir);
-            if (cell != null) {
-                if (!lavaMatched.includes(dir)) {
-                    cell.lava = TRAP_SAFE;
+    return false;
+}
+
+function lookForTraps(x, y, engram) {
+    if (isInBounds(x, y)) {
+        var matched = {};
+
+        TRAPS.forEach(function(trap) {
+            matched[trap] = [];
+        });
+
+        TRAPS.forEach(function(trap) {
+            SENSES.forEach(function(sense) {
+                if (PATTERNS_TRAPS[trap] && PATTERNS_TRAPS[trap][sense]) {
+                    // get the pattern
+                    var pattern = PATTERNS_TRAPS[trap][sense];
+
+                    // match it against the correct engram
+                    var matches = pattern.exec(engram[sense]);
+
+                    // see if it matched
+                    if (matches != null) {
+                        // Make sure it matched correctly
+                        if (matches.length == 2 && matches[1]) {
+                            var dir = matches[1];
+
+                            // remember that there is a trap there
+                            matched[trap].push(dir);
+
+                            // add the cell that the lava is in
+                            var cell = getCellByDir(x, y, dir);
+                            if (cell != null) {
+                                cell[trap] = TRAP_HERE;
+                            } else {
+                                console.log("[Engram] [WARN] Found trap out of bounds: " + x + "," + y + "->" + dir);
+                            }
+
+                            // TODO update neighbors
+                        } else {
+                            console.log("[Engram] [WARN] Pattern matched but had wrong number of groups: " + pattern);
+                        }
+                    }
                 }
-                if (!fireMatched.includes(dir)) {
-                    cell.fire = TRAP_SAFE;
+            });
+        });
+
+        TRAPS.forEach(function(trap) {
+            DIRECTIONS.forEach(function(dir) {
+                // make sure that this direction was matched for this trap
+                if (!matched[trap].includes(dir)) {
+                    var cell = getCellByDir(x, y, dir);
+                    if (cell != null) {
+                        cell[trap] = TRAP_SAFE;
+                    }
                 }
-                if (!pitMatched.includes(dir)) {
-                    cell.pit = TRAP_SAFE;
-                }
-            }
+            });
         });
     } else {
         console.log("[Engram] [WARN] Can't look for traps - out of bounds");
@@ -827,48 +850,6 @@ function pickAction(actions) {
         }
 
         return filteredActions[0];
-        /*
-        // sort by confidence
-        actions.sort(function(a, b) {
-            return b.conf - a.conf;
-        });
-
-        //console.log("Sorted actions:");
-        //console.log(JSON.stringify(actions));
-
-        // Minimum number of low-priority actions to consider
-        var lowToConsider = Math.max(1, Math.floor(0.25 * actions.length));
-
-        var filteredActions = [];
-
-        // pick out most confidend
-        var lowConsidered = 0;
-
-        actions.forEach(function(action) {
-            // High confidence has priority
-            if (action.conf >= CONF_GOOD) {
-                filteredActions.push(action);
-            } else if (lowConsidered < lowToConsider) {
-                filteredActions.push(action);
-                lowConsidered++;
-            }
-        });
-
-        //for (var i = 0; i < numToConsider; i++) {
-        //    filteredActions[i] = actions[i];
-        //}
-
-        // sort by rating
-        filteredActions.sort(function(a, b) {
-            return b.rating - a.rating;
-        });
-
-        //console.log("Filtered actions:");
-        //console.log(JSON.stringify(actions));
-
-        // return best rated
-        return filteredActions[0];
-        */
     } else {
         console.log("[Brain] There are no possible actions!");
         return null;
