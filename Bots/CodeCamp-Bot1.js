@@ -4,14 +4,15 @@
  * Bot 1 - Chris Koehler
  */
 
-const MAX_DIST = 3;
-const DIST_UNKNOWN = -2;
-const DIST_SAFE = -1;
-const DIST_HERE = 0;
+const TRAP_UNKNOWN = -1;
+const TRAP_SAFE = 0;
+const TRAP_HERE = 1;
+const TRAP_NEAR = 2;
 
 const OBSERVED_NO = 0;
-const OBSERVED_LOOKED = 1;
-const OBSERVED_VISITED = 2;
+const OBSERVED_ADJACENT = 1;
+const OBSERVED_LOOKED = 2;
+const OBSERVED_VISITED = 3;
 
 const RATING_IMPOSSIBLE = -1.0;
 const RATING_WORST = 0.0;
@@ -19,6 +20,7 @@ const RATING_BAD = 0.25;
 const RATING_NEUTRAL = 0.5;
 const RATING_GOOD = 0.75;
 const RATING_BEST = 1.0;
+const RATING_MUST = 1.1;
 
 const CONF_WORST = 0.0;
 const CONF_BAD = 0.25;
@@ -30,7 +32,17 @@ const WALL_UNKNOWN = -1;
 const WALL_PRESENT = 0;
 const WALL_ABSENT = 1;
 
-const PATTERN_WALLS = /exits to the\\W*(north)?(?:\\W|and)*(south)?(?:\\W|and)*(east)?(?:\\W|and)*(west)?\\./;
+const DIRECTIONS = ['north', 'south', 'east', 'west'];
+const ALL_DIRECTIONS = ['north', 'south', 'east', 'west', 'none'];
+
+const PATTERN_WALLS = /exits to the\W*(north)?(?:\W|and)*(south)?(?:\W|and)*(east)?(?:\W|and)*(west)?\./i;
+const PATTERN_EXIT = /(?:the exit) to the (south|north|east|west)/i;
+const PATTERN_LAVA_SIGHT = /lava.*(north|south|east|west)/i;
+const PATTERN_LAVA_SOUND = /lava.*(north|south|east|west)/i;
+const PATTERN_LAVA_SMELL = /molten rock.*(north|south|east|west)/i;
+const PATTERN_LAVA_TOUCH = /threatening warmth.*(north|south|east|west)/i;
+const PATTERN_WON = /safely exit the maze/i;
+const PATTERN_FIRE = /rythmic.*(north|south|east|west)/i;
 
 // 2D array of cells
 var maze = null;
@@ -41,117 +53,16 @@ var mazeHeight = 0;
 var playerX = 0;
 var playerY = 0;
 var playerDir = null;
+var playerState = null;
+var playerMoved = false;
 
-/*
-var maze = new Array(10);
-for (var x = 0; x < maze.length; x++) {
-    maze[x] = new Array(10);
-    for (var y = 0; y < maze[x].length; y++) {
-        maze[x][y] = {
-            x: x,
-            y: y,
+var exitDoorDir = null;
 
-            observed: OBSERVED_NO,
-
-            fire: DIST_UNKNOWN,
-            pit: DIST_UNKNOWN,
-            exit: DIST_UNKNOWN,
-            start: DIST_UNKNOWN,
-            
-            walls: {
-                north: WALL_UKNOWN,
-                east: WALL_UKNOWN,
-                south: WALL_UKNOWN,
-                west: WALL_UKNOWN
-            }
-        };
-    }
-}
-*/
-
-/*
-function openExit(direction, sight) {
-    var exits = getExits(sight);
-
-    if (direction == "north" && exits.north) {
-        return true;
-    }
-    if (direction == "south" && exits.south) {
-        return true;
-    }
-    if (direction == "east" && exits.east) {
-        return true;
-    }
-    if (direction == "west" && exits.west) {
-        return true;
-    }
-
-    return false;
-}
-*/
-
-/*
-function getExits(sight) {
-    var exits = {
-        north: false,
-        south: false,
-        east: false,
-        west: false,
-    };
-    
-    if (sight.includes("exit")) {
-        if (sight.includes("north")) {
-            exits.north=true;
-        }
-        if (sight.includes("south")) {
-            exits.south=true;
-        }
-        if (sight.includes("east")) {
-            exits.east=true;
-        }
-        if (sight.includes("west")) {
-            exits.west=true;
-        }
-    }
-
-    return exits;
-}
-*/
-
-function getRight(direction) {
-    if ("north" == direction) {
-        return "east";
-    }
-    if ("east" == direction) {
-        return "south";
-    }
-    if ("south" == direction) {
-        return "west";
-    }
-    if ("west" == direction) {
-        return "north";
-    }
-    return "north"; // don't know!   
-}
-
-function getLeft(direction) {
-    if ("north" == direction) {
-        return "west";
-    }
-    if ("east" == direction) {
-        return "north";
-    }
-    if ("south" == direction) {
-        return "east";
-    }
-    if ("west" == direction) {
-        return "south";
-    }
-    return "south"; // don't know!   
-}
+var moveNumber = 0;
+var mostMovesInCell = 0;
 
 function isInBounds(x, y) {
-    return x >= 0 && x < 10 && y >= 0 && y < 10;
+    return x >= 0 && x < mazeWidth && y >= 0 && y < mazeHeight;
 }
 
 function getOffsetX(dir) {
@@ -235,7 +146,7 @@ function canMoveInDir(x, y, dir) {
     var cell = maze[x][y];
     
     // check for walls
-    if (cell.walls[dir] != WALL_PRESENT) {
+    if (cell.walls[dir] != WALL_ABSENT) {
         return false;
     }
 
@@ -243,16 +154,21 @@ function canMoveInDir(x, y, dir) {
     return getCellByDir(x, y, dir) != null;
 }
 
-function shouldMoveInDir(x, y, dir) {
+function safeToMoveInDir(x, y, dir) {
     if (canMoveInDir(x, y, dir)) {
         var next = getCellByDir(x, y, dir);
-        if (next.fire == DIST_HERE) {
+        if (next.lava == TRAP_HERE) {
             return false;
         }
-        if (next.pit == DIST_HERE) {
+        if (next.pit == TRAP_HERE) {
             return false;
         }
+        if (next.fire == TRAP_HERE) {
+            return false;
+        }
+        return true;
     }
+    return false;
 }
 
 function createZeroRating() {
@@ -267,56 +183,52 @@ function createZeroRating() {
  * Rating and confidence calculationas
  */
  
- // fire
-function calcFireRate(fire) {
-    if (fire == DIST_UNKNOWN) {
-        return RATING_NEUTRAL;
+ // lava
+function calcSpecificTrapRate(trap) {
+    switch (trap) {
+        case TRAP_HERE:
+            return RATING_WORST;
+        case TRAP_SAFE:
+            return RATING_BEST;
+        default:
+            return RATING_NEUTRAL;
     }
-    if (fire == DIST_HERE) {
-        return RATING_WORST;
-    }
-    if (fire == DIST_SAFE) {
-        return RATING_BEST;
-    }
-    return Math.min(RATING_GOOD, (fire / (MAX_DIST + 1)) * RATING_GOOD);
 }
-function calcFireConf(fire) {
-    if (fire == DIST_UNKNOWN) {
-        return CONF_WORST;
+function calcSpecificTrapConf(trap) {
+    switch (trap) {
+        case TRAP_UNKNOWN:
+            return CONF_WORST;
+        case TRAP_NEAR:
+            return CONF_GOOD;
+        default:
+            return CONF_BEST;
     }
-    if (fire == DIST_HERE) {
-        return CONF_BEST;
-    }
-    if (fire == DIST_SAFE) {
-        return CONF_BEST;
-    }
-    return Math.min(CONF_GOOD, (fire / (MAX_DIST + 1)) * CONF_GOOD);
 }
 
 // pits
 function calcPitRate(pit) {
-    if (pit == DIST_UNKNOWN) {
+    if (pit == TRAP_UNKNOWN) {
         return RATING_NEUTRAL;
     }
-    if (pit == DIST_HERE) {
+    if (pit == TRAP_HERE) {
         return RATING_WORST;
     }
-    if (pit == DIST_SAFE) {
+    if (pit == TRAP_SAFE) {
         return RATING_BEST;
     }
-    return Math.min(RATING_GOOD, (pit / (MAX_DIST + 1)) * RATING_GOOD);
+
+    // TRAP_NEAR
+    return RATING_BAD;
 }
 function calcPitConf(pit) {
-    if (pit == DIST_UNKNOWN) {
+    if (pit == TRAP_UNKNOWN) {
         return CONF_WORST;
     }
-    if (pit == DIST_HERE) {
-        return CONF_BEST;
+    if (pit == TRAP_NEAR) {
+        return CONF_GOOD;
     }
-    if (pit == DIST_SAFE) {
-        return CONF_BEST;
-    }
-    return Math.min(CONF_GOOD, (pit / (MAX_DIST + 1)) * CONF_GOOD);
+
+    return CONF_BEST;
 }
 
 // visited
@@ -370,26 +282,77 @@ function calcWallsConf(walls) {
     return conf;
 }
 
-/*
- * Cell rating functions
- */
+function calcContinueRate(cell) {
+    var next = getCellByDir(playerX, playerY, playerDir);
+    if (next == cell) {
+        return RATING_BEST;
+    } else {
+        return RATING_WORST;
+    }
+}
+
+function calcContinueConf(cell) {
+    return CONF_BEST;
+}
+
+function calcVisitCountRate(cell) {
+    if (mostMovesInCell != 0) {
+        return (mostMovesInCell - cell.visitCount) / mostMovesInCell;
+    } else {
+        return RATING_BEST;
+    }
+}
+
+function calcVisitCountConf(cell) {
+    return CONF_BEST;
+}
+
+function calcTrapRate(cell) {
+    var rate = 0.0;
+    
+    rate += 0.33 * calcSpecificTrapRate(cell.lava);
+    rate += 0.33 * calcSpecificTrapRate(cell.fire);
+    rate += 0.33 * calcSpecificTrapRate(cell.pit);
+
+    return rate;
+}
+
+function calcTrapConf(cell) {
+    var conf = 0.0;
+    
+    conf += 0.33 * calcSpecificTrapConf(cell.lava);
+    conf += 0.33 * calcSpecificTrapConf(cell.fire);
+    conf += 0.33 * calcSpecificTrapConf(cell.pit);
+
+    return conf;
+}
+
 function getCellRating(cell) {
     var confidence = 0.0;
     var rating = 0.0;
 
     // value += weight * normalized value
 
-    rating += 0.2 * calcFireRate(cell.fire);
-    confidence += 0.2 * calcFireConf(cell.fire);
 
-    rating += 0.2 * calcPitRate(cell.pit);
-    confidence += 0.2 * calcPitConf(cell.fire);
+    rating += 0.05 * calcContinueRate(cell);
+    confidence += 0.05 * calcContinueConf(cell);
 
-    rating += 0.5 * calcVisitedRate(cell.visited);
-    confidence += 0.5 * calcVisitedConf(cell.visited);
+    rating += 0.25 * calcVisitCountRate(cell);
+    confidence += 0.25 * calcVisitCountConf(cell);
 
-    rating += 0.1 * calcWallsRate(cell.walls);
-    confidence += 0.1 * calcWallsConf(cell.walls);
+    //rating += 0.3 * calcLavaRate(cell.lava);
+    //confidence += 0.3 * calcLavaConf(cell.lava);
+    rating += 0.3 * calcTrapRate(cell);
+    confidence += 0.3 * calcTrapConf(cell);
+
+    //rating += 0.25 * calcPitRate(cell.pit);
+    //confidence += 0.25 * calcPitConf(cell.pit);
+
+    rating += 0.4 * calcVisitedRate(cell.observed);
+    confidence += 0.4 * calcVisitedConf(cell.observed);
+
+    //rating += 0.1 * calcWallsRate(cell.walls);
+    //confidence += 0.1 * calcWallsConf(cell.walls);
 
     return {
         confidence: confidence,
@@ -397,7 +360,7 @@ function getCellRating(cell) {
     };
 }
 
-function getCellRating(x, y) {
+function getCellRatingByCoord(x, y) {
     if (isInBounds(x, y)) {
         return getCellRating(maze[x][y]);
     } else {
@@ -405,12 +368,71 @@ function getCellRating(x, y) {
     }
 }
 
-function getCellRating(x, y, dir) {
+function getCellRatingByDir(x, y, dir) {
     var cell = getCellByDir(x, y, dir);
     if (cell != null) {
+        return getCellRating(cell);
+    } else {
         return createZeroRating();
     }
 }
+
+function calcLookRating(dir) {
+    if (maze[playerX][playerY].walls[dir] != WALL_PRESENT) {
+        var cell = getCellByDir(playerX, playerY, dir);
+        if (cell != null) {
+            switch (cell.observed) {
+                case OBSERVED_VISITED:
+                case OBSERVED_LOOKED:
+                    return RATING_WORST;
+                case OBSERVED_ADJACENT:
+                    return RATING_NEUTRAL;
+                case OBSERVED_NO:
+                    return RATING_BEST;
+                default:
+                    console.log("[Brain] [WARN] cell is in invalid observed state: " + cell.observed);
+                    return RATING_NEUTRAL;
+            }
+        } else {
+            return RATING_IMPOSSIBLE;
+        }
+    } else {
+        return RATING_IMPOSSIBLE;
+    }
+}
+
+function calcLookConf(dir) {
+    return CONF_BEST;
+}
+
+function calcStandRating() {
+    if (playerState != 'standing') {
+        return RATING_BEST;
+    } else {
+        return RATING_IMPOSSIBLE;
+    }
+}
+
+function calcStandConf() {
+    return CONF_BEST;
+}
+
+function calcMoveRating(dir) {
+    if (safeToMoveInDir(playerX, playerY, dir)) {
+        return getCellRatingByDir(playerX, playerY, dir).rating;
+    } else {
+        return RATING_IMPOSSIBLE;
+    }
+}
+
+function calcMoveConf(dir) {
+    if (safeToMoveInDir(playerX, playerY, dir)) {
+        return getCellRatingByDir(playerX, playerY, dir).confidence;
+    } else {
+        return CONF_BEST;
+    }
+}
+
 
 /*
  * Parsing functions
@@ -420,8 +442,8 @@ function initMaze(gameState) {
     var mazeX = parseInt(mazeDims[0]);
     var mazeY = parseInt(mazeDims[1]);
     
-    mazeWidth = mazeX;
-    mazeHeight = mazeY;
+    mazeWidth = mazeY;
+    mazeHeight = mazeX;
     
     maze = new Array(mazeWidth);
     for (var x = 0; x < mazeWidth; x++) {
@@ -432,11 +454,13 @@ function initMaze(gameState) {
                 y: y,
 
                 observed: OBSERVED_NO,
+                visitCount: 0,
 
-                fire: DIST_UNKNOWN,
-                pit: DIST_UNKNOWN,
-                exit: DIST_UNKNOWN,
-                start: DIST_UNKNOWN,
+                lava: TRAP_UNKNOWN,
+                pit: TRAP_UNKNOWN,
+                fire: TRAP_UNKNOWN,
+                exit: TRAP_UNKNOWN,
+                start: TRAP_UNKNOWN,
                 
                 walls: {
                     north: WALL_UNKNOWN,
@@ -451,8 +475,19 @@ function initMaze(gameState) {
 
 // update player location
 function updateLocation(location) {
-    playerX = location.row;
-    playerY = location.col;
+    var oldX = playerX;
+    var oldY = playerY;
+
+    playerX = location.col;
+    playerY = location.row;
+
+    if (playerX != oldX || playerY != oldY) {
+        console.log("[Engram] Moved to " + playerX + "," + playerY);
+
+        playerMoved = true;
+    } else {
+        playerMoved = false;
+    }
 }
 
 // updates walls by sight
@@ -460,70 +495,388 @@ function updateWalls(sight, x, y) {
     // match the regex
     var matches = PATTERN_WALLS.exec(sight);
     
-    // loop through each match, starting at first group
-    for (var i = 1; i < matches.length; i++) {
-        var match = matches[i].toLowerCase();
-        switch (match) {
-            case "north":
-                addWall(x, y, 'north');
-                break;
-            case "east":
-                addWall(x, y, 'east');
-                break;
-            case "south":
-                addWall(x, y, 'south');
-                break;
-            case "west":
-                addWall(x, y, 'west');
-                break;
-            default:
-                console.log("Bad wall: '" + match + "' from '" + sight + "'.");
-                break;
+    // find all the doors
+    if (matches != null) {
+        // loop through each match, starting at first group
+        for (var i = 1; i < matches.length; i++) {
+            // make sure match existed
+            if (matches[i]) {
+                var match = matches[i].toLowerCase();
+                switch (match) {
+                    case "north":
+                        removeWall(x, y, 'north');
+                        break;
+                    case "east":
+                        removeWall(x, y, 'east');
+                        break;
+                    case "south":
+                        removeWall(x, y, 'south');
+                        break;
+                    case "west":
+                        removeWall(x, y, 'west');
+                        break;
+                    default:
+                        console.log("Bad wall: '" + match + "' from '" + sight + "'.");
+                        break;
+                }
+            }
         }
+    } else {
+        console.log("[Engram] [WARN] walls pattern did not match.");
     }
     
-    // set remaining walls to open
+    // add remaining spaces as walls
     if (maze[x][y].walls['north'] == WALL_UNKNOWN) {
-        removeWall(x, y, 'north');
+        addWall(x, y, 'north');
     }
     if (maze[x][y].walls['south'] == WALL_UNKNOWN) {
-        removeWall(x, y, 'south');
+        addWall(x, y, 'south');
     }
     if (maze[x][y].walls['east'] == WALL_UNKNOWN) {
-        removeWall(x, y, 'east');
+        addWall(x, y, 'east');
     }
     if (maze[x][y].walls['west'] == WALL_UNKNOWN) {
-        removeWall(x, y, 'west');
+        addWall(x, y, 'west');
+    }
+}
+
+function updateExit(engram) {
+    // match the regex
+    var matches = PATTERN_EXIT.exec(engram.sound);
+
+    // set to null, if exit is found then it will be reset below
+    exitDoorDir = null;
+
+    if (matches != null) {
+        if (matches.length == 2) {
+            if (matches[1]) {
+                // set the exit
+                exitDoorDir = matches[1];
+
+                console.log("[Engram] Found exit: " + exitDoorDir);
+            } else {
+                console.log("[Engram] [WARN] Exit regex matched but did not have an exit!");
+            }
+        } else {
+            console.log("[Engram] [WARN] Exit regex matched but had wrong number of groups!");
+        }
+    }
+}
+
+function observeCell(x, y, visited) {
+    if (isInBounds(x, y)) {
+        maze[x][y].observed = visited ? OBSERVED_VISITED : OBSERVED_LOOKED;
+
+        // update neighbors
+        DIRECTIONS.forEach(function(dir) {
+            if (maze[x][y].walls[dir] == WALL_ABSENT) {
+                var cell = getCellByDir(x, y, dir);
+                if (cell != null && cell.observed == OBSERVED_NO) {
+                    cell.observed = OBSERVED_ADJACENT;
+                }
+            }
+        });
+    } else {
+        console.log("[Engram] [WARN] Tried to observe out of bounds!");
+    }
+}
+
+function lookForTraps(x, y, engram) {
+    if (isInBounds(x, y)) {
+        var fireMatched = [];
+        var lavaMatched = [];
+        var pitMatched = [];
+
+        // Check for lava
+        [PATTERN_LAVA_SIGHT, PATTERN_LAVA_SMELL, PATTERN_LAVA_SOUND, PATTERN_LAVA_TOUCH].forEach(function(pattern) {
+            // match the regex
+            // TODO fix for non-sound
+            var matches = pattern.exec(engram.sound);
+
+            if (matches != null) {
+                if (matches.length == 2 && matches[1]) {
+                    var dir = matches[1];
+                    lavaMatched.push(dir);
+
+                    // add the cell that the lava is in
+                    var cell = getCellByDir(x, y, dir);
+                    if (cell != null) {
+                        cell.lava = TRAP_HERE;
+                    } else {
+                        console.log("[Engram] [WARN] Found trap out of bounds: " + x + "," + y + "->" + dir);
+                    }
+
+                    // TODO update neighbors
+                } else {
+                    console.log("[Engram] [WARN] Pattern matched but had wrong number of groups: " + pattern);
+                }
+            }
+        });
+
+        var fireMatched = [];
+
+        // Check for fire
+        var matches = PATTERN_FIRE.exec(engram.sound);
+
+        if (matches != null) {
+            if (matches.length == 2 && matches[1]) {
+                var dir = matches[1];
+                fireMatched.push(dir);
+
+                // add the cell that the fire is in
+                var cell = getCellByDir(x, y, dir);
+                if (cell != null) {
+                    cell.fire = TRAP_HERE;
+                } else {
+                    console.log("[Engram] [WARN] Found trap out of bounds: " + x + "," + y + "->" + dir);
+                }
+
+                // TODO update neighbors
+            } else {
+                console.log("[Engram] [WARN] Pattern matched but had wrong number of groups: " + pattern);
+            }
+        }
+
+        DIRECTIONS.forEach(function(dir) {
+            // mark cell as safe
+            var cell = getCellByDir(x, y, dir);
+            if (cell != null) {
+                if (!lavaMatched.includes(dir)) {
+                    cell.lava = TRAP_SAFE;
+                }
+                if (!fireMatched.includes(dir)) {
+                    cell.fire = TRAP_SAFE;
+                }
+                if (!pitMatched.includes(dir)) {
+                    cell.pit = TRAP_SAFE;
+                }
+            }
+        });
+    } else {
+        console.log("[Engram] [WARN] Can't look for traps - out of bounds");
     }
 }
 
 // Parses an engram and updates the maze data
-function parseEngram(engram) {
-    var x = playerX;
-    var y = playerY;
-    
+function parseEngram(gameState) {
     // update direction
-    if (engram.direction.toLowerCase() != playerDir) {
-        console.log("Turning to " + engram.direction);
-        
-        playerDir = engram.direction.toLowerCase();
+    if (gameState.direction.toLowerCase() != playerDir) {
+        playerDir = gameState.direction.toLowerCase();
+
+        console.log("[Engram] Turned to " + playerDir);
     }
+
+    // Get location where action took place
+    var actionX = playerX;
+    var actionY = playerY;
     
     // if we were LOOKing
-    if (engram.action == "LOOK") {
+    if (gameState.action == "LOOK") {
         // then switch coordinates to the target block
-        x += getOffsetX(playerDir);
-        y += getOffsetY(playerDir);
+        actionX += getOffsetX(playerDir);
+        actionY += getOffsetY(playerDir);
+
+        console.log("[Engram] We looked at " + actionX + "," + actionY);
     }
     
     // update walls
-    if (isInBounds(x, y)) {
-        updateWalls(engram.sight, x, y);
+    if (isInBounds(actionX, actionY)) {
+        updateWalls(gameState.engram.sight, actionX, actionY);
     } else {
-        console.log("Looked out of bounds: " + x + "," + y);
+        console.log("[Engram] [WARN] can't update walls - out of bounds: " + actionX + "," + actionY);
     }
+
+    // Update square visited state (must be after walls)
+    if (playerMoved || gameState.action == "LOOK") {
+        observeCell(actionX, actionY, true);
+    }
+
+    // Update square enter count
+    if (playerMoved) {
+        // Find the cell
+        var cell = maze[actionX][actionY];
+
+        // Increase its visit count
+        cell.visitCount++;
+
+        // If this is the most visited then remember
+        if (cell.visitCount > mostMovesInCell) {
+            mostMovesInCell = cell.visitCount;
+        }
+
+    }
+
+    // Look for traps
+    lookForTraps(actionX, actionY, gameState.engram);
+
+    // update condition
+    if (gameState.playerStateInWords != playerState) {
+        playerState = gameState.playerStateInWords;
+
+        console.log("[Engram] Player is now " + playerState);
+    }
+
+    // Update exit
+    updateExit(gameState.engram);
+}
+
+/*
+ * Action code
+ */
+function createLookAction(direction) {
+    return {
+        command: {
+            action: 'look',
+            direction: direction,
+        },
+        rating: calcLookRating(direction),
+        conf: calcLookConf(direction),
+    };
+}
+
+function createStandAction() {
+    return {
+        command: {
+            action: 'stand',
+            direction: 'up',
+        },
+        rating: calcStandRating(),
+        conf: calcStandConf(),
+    };
+}
+
+function createDirectionAction(dir) {
+    return {
+        command: {
+            action: 'move',
+            direction: dir,
+        },
+        rating: calcMoveRating(dir),
+        conf: calcMoveConf(dir),
+    };
+}
+
+function createExitAction() {
+    if (exitDoorDir != null) {
+        return {
+            command: {
+                action: 'move',
+                direction: exitDoorDir,
+            },
+            rating: RATING_MUST,
+            conf: CONF_BEST,
+        };
+    } else {
+        return {
+            command: {},
+            rating: RATING_IMPOSSIBLE,
+            conf: CONF_BEST,
+        };
+    }
+}
+
+function findPossibleActions() {
+    var actions = [];
+
+    // Add look actions
+    ALL_DIRECTIONS.forEach(function(dir) {
+        actions.push(createLookAction(dir));
+    });
+
+    // Add stand action
+    actions.push(createStandAction());
     
-    // update location and position
+    // Add direction actions
+    DIRECTIONS.forEach(function(dir) {
+        actions.push(createDirectionAction(dir));
+        // TODO jump action
+    });
+
+    // Add exit action
+    actions.push(createExitAction());
+
+    console.log("Possible actions:");
+    //console.log(JSON.stringify(actions, null, 2));
+    console.log(JSON.stringify(actions));
+
+    return actions;
+}
+
+function pickAction(actions) {
+    if (actions.length > 0) {
+        // number of actions to consider
+        var numToConsider = Math.max(1, Math.round(0.33 * actions.length));
+
+        var filteredActions = [];
+
+        // Filter actions
+        actions.forEach(function(action) {
+            if (action.conf >= CONF_GOOD || action.rating >= RATING_GOOD || filteredActions.length < numToConsider) {
+                filteredActions.push(action);
+            }
+        });
+
+        // Sort by combined value
+        filteredActions.sort(function(a, b) {
+            return (b.conf * b.rating) - (a.conf * a.rating);
+        });
+
+        // Trim to size (probably not needed)
+        while (filteredActions.length > numToConsider) {
+            filteredActions.pop();
+        }
+
+        return filteredActions[0];
+        /*
+        // sort by confidence
+        actions.sort(function(a, b) {
+            return b.conf - a.conf;
+        });
+
+        //console.log("Sorted actions:");
+        //console.log(JSON.stringify(actions));
+
+        // Minimum number of low-priority actions to consider
+        var lowToConsider = Math.max(1, Math.floor(0.25 * actions.length));
+
+        var filteredActions = [];
+
+        // pick out most confidend
+        var lowConsidered = 0;
+
+        actions.forEach(function(action) {
+            // High confidence has priority
+            if (action.conf >= CONF_GOOD) {
+                filteredActions.push(action);
+            } else if (lowConsidered < lowToConsider) {
+                filteredActions.push(action);
+                lowConsidered++;
+            }
+        });
+
+        //for (var i = 0; i < numToConsider; i++) {
+        //    filteredActions[i] = actions[i];
+        //}
+
+        // sort by rating
+        filteredActions.sort(function(a, b) {
+            return b.rating - a.rating;
+        });
+
+        //console.log("Filtered actions:");
+        //console.log(JSON.stringify(actions));
+
+        // return best rated
+        return filteredActions[0];
+        */
+    } else {
+        console.log("[Brain] There are no possible actions!");
+        return null;
+    }
+}
+
+function makeAction(action) {
+    return action.command;
 }
 
 module.exports = {
@@ -535,7 +888,6 @@ module.exports = {
         // *********************************************************************
         // CODE HERE!
         // *********************************************************************
-
 
         var command = {
             action: null,
@@ -550,7 +902,46 @@ module.exports = {
             command.action = "look";
             command.direction = "none";
             command.message = "first look";
+            return command;
         } else {
+            // update move number
+            moveNumber = gameState.score.moveCount + 1;
+
+            // print game state
+            //console.log(JSON.stringify(gameState, null, 2));
+            console.log("[Game] Begining move " + moveNumber);
+            console.log("[Game] Sight: " + gameState.engram.sight.trim());
+            console.log("[Game] Sound: " + gameState.engram.sound.trim());
+            console.log("[Game] Smell: " + gameState.engram.smell.trim());
+            console.log("[Game] Touch: " + gameState.engram.touch.trim());
+            console.log("[Game] Taste: " + gameState.engram.taste.trim());
+
+            // Check for victory
+            if (PATTERN_WON.test(gameState.engram.touch)) {
+                console.log("We won!");
+
+                maze = null;
+                mazeWidth = 0;
+                mazeHeight = 0;
+
+                playerX = 0;
+                playerY = 0;
+                playerDir = null;
+                playerState = null;
+                playerMoved = false;
+
+                exitDoorDir = null;
+
+                moveNumber = 0;
+                mostMovesInCell = 0;
+
+                console.log("Making look action for next game");
+                command.action = "look";
+                command.direction = "none";
+                command.message = "first look";
+                return command;
+            }
+
             // if this is first action, then build maze
             if (maze == null) {
                 console.log("Initializing maze");
@@ -558,66 +949,38 @@ module.exports = {
                 initMaze(gameState);
             }
             
+            /*
+            Parse engram
+            */
+
             console.log("Updating game model");
             
             // update bot location
             updateLocation(gameState.location);
             
             // parse the engram and update maze
-            parseEngram(gameState.engram); 
+            parseEngram(gameState);
             
+            /*
+            Pick action
+            */
+           console.log("[Brain] Picking action");
+           var actions = findPossibleActions();
+           var action = pickAction(actions);
             
-            
-        /*
-                // let's see what we saw
-                if (!gameState.engram.sight.toLowerCase().includes('lava') &&
-                    !gameState.engram.sight.toLowerCase().includes('wall')) {
-                    // no lava, no wall, that's good!
+           /*
+            Making action
+           */
+          console.log("[Action] Making action");
+          command = makeAction(action);
 
-                    if ("look" == command.action) {
-                        // if our last action was looking in a direction, go ahead and move that way
-                        imFacing = command.direction;
-                        command.action = "move";
-                        lookedLeft = false;
-                        lookedRight = false;
-                    } else {
-                        // we're in motion, so use the sight sense to keep moving quickly
-                        if (openExit(getRight(imFacing), gameState.engram.sight)) {
-                            imFacing = getRight(imFacing);
-                            command.action = "move";
-                            command.direction = imFacing;
-                        } else if (openExit(imFacing, gameState.engram.sight)) {
-                            command.action = "move";
-                            command.direction = imFacing;
-                        } else if (openExit(getLeft(imFacing), gameState.engram.sight)) {
-                            imFacing = getLeft(imFacing);
-                            command.action = "move";
-                            command.direction = imFacing;
-                        } else {
-                            imFacing = getRight(getRight(imFacing));
-                            command.action = "move";
-                            command.direction = imFacing;
-                        }
-                    }
-                } else {
-                    if (!lookedRight) {
-                        lookedRight = true;
-                        command.action = "look";
-                        command.direction = getRight(imFacing);
-                    } else if (!lookedLeft) {
-                        lookedLeft = true;
-                        command.action = "look";
-                        command.direction = getLeft(imFacing);
-                    } else {
-                        command.action = "move"; // turn around!
-                        command.direction = getRight(getRight(imFacing));
-                        imFacing = command.direction;
-                    }
-                }
-                */
-            }
+          console.log("[Action] Made action: " + JSON.stringify(command));
+
+          return command;
+        }
         
         // always return the command
+        console.log("We fell to the bottom!");
         return command;
 
         // *********************************************************************
